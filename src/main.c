@@ -194,6 +194,10 @@ static void file_read_response_handler(uint8_t transfer_id, int16_t error, const
 static void file_beginfirmwareupdate_handler(struct uavcan_transfer_info_s transfer_info, uint8_t source_node_id, const char* path)
 {
     if (!flash_state.in_progress) {
+        if (source_node_id == 0) {
+            source_node_id = transfer_info.remote_node_id;
+        }
+
         uavcan_send_file_beginfirmwareupdate_response(&transfer_info, UAVCAN_BEGINFIRMWAREUPDATE_ERROR_OK, "");
         begin_flash_from_path(source_node_id, path);
     } else {
@@ -221,7 +225,7 @@ static void bootloader_init(void)
     uavcan_set_file_read_response_cb(file_read_response_handler);
     boot_timer_start_ms = millis();
 
-    if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE) {
+    if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE && shared_msg.firmwareupdate_msg.local_node_id != 0) {
         uavcan_set_node_id(shared_msg.firmwareupdate_msg.local_node_id);
     }
 }
