@@ -27,7 +27,10 @@
 
 // TODO move into some config file
 #define BOOT_DELAY_MS 3000
-#define APP_PAGE_SIZE 1024
+#define APP_PAGE_SIZE 2048
+#define HW_NAME "com.proficnc.esc"
+#define HW_MAJOR_VER 1
+#define HW_MINOR_VER 0
 
 struct jump_info_s {
     uint32_t stacktop;

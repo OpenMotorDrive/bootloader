@@ -21,9 +21,21 @@ struct firmwareupdate_msg_s {
     char path[201];
 } SHARED_MSG_PACKED;
 
+struct hwinfo_s {
+    char hw_name[81];
+    uint8_t hw_major_version;
+    uint8_t hw_minor_version;
+} SHARED_MSG_PACKED;
+
+struct boot_info_msg_s {
+    uint8_t local_node_id;
+    const struct hwinfo_s* hwinfo_ptr;
+} SHARED_MSG_PACKED;
+
 union shared_msg_payload_u {
     struct boot_msg_s boot_msg;
     struct firmwareupdate_msg_s firmwareupdate_msg;
+    struct boot_info_msg_s boot_info_msg;
 };
 
 bool shared_msg_check_and_retreive(enum shared_msg_t* msgid, union shared_msg_payload_u* msg_payload);

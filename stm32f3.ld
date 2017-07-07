@@ -1,11 +1,13 @@
 /* Define memory regions. */
 MEMORY
 {
-    rom (rx) :          ORIGIN = 0x08000000, LENGTH = 10K
-    app (rx) :          ORIGIN = 0x08000000+10K, LENGTH = 64K-10K-2K
-    params (rx) :       ORIGIN = 0x0800F800, LENGTH =  2K
-    ram (rwx) :         ORIGIN = 0x20000000, LENGTH = 16K-512
-    app_bl_shared (rwx) : ORIGIN = 0x20000000+(16K-512), LENGTH = 512
+    rom (rx) :          ORIGIN = 0x08000000,              LENGTH = 10K
+    hwinfo (rx) :       ORIGIN = 0x08000000+10K,          LENGTH = 2K-4
+    hwinfo_crc (rx) :   ORIGIN = 0x08000000+10K+1K-4,     LENGTH = 4
+    app (rx) :          ORIGIN = 0x08000000+10K+1K,       LENGTH = 50K
+    params (rx) :       ORIGIN = 0x0800F800+10K+1K+50K,   LENGTH = 2K
+    ram (rwx) :         ORIGIN = 0x20000000,              LENGTH = 16K-512
+    app_bl_shared (rwx) : ORIGIN = 0x20000000+(16K-512),  LENGTH = 512
 }
 
 /* Enforce emmition of the vector table. */
@@ -33,6 +35,9 @@ SECTIONS
 
     .app (NOLOAD) : {
     } >app
+
+    .hwinfo(NOLOAD) : {
+    } >hwinfo
 
     /* C++ Static constructors/destructors, also used for __attribute__
         * ((constructor)) and the likes */
