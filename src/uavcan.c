@@ -174,6 +174,10 @@ void uavcan_set_node_id(uint8_t node_id) {
     canardSetLocalNodeID(&canard, node_id);
 }
 
+uint8_t uavcan_get_node_id() {
+    return canardGetLocalNodeID(&canard);
+}
+
 void uavcan_set_node_mode(enum uavcan_node_mode_t mode)
 {
     node_mode = mode;

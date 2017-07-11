@@ -21,15 +21,36 @@ struct firmwareupdate_msg_s {
     char path[201];
 } SHARED_MSG_PACKED;
 
-struct hwinfo_s {
-    char hw_name[81];
+struct onboard_periph_pin_info_s {
+    uint8_t function; // enum defined per-application
+    uint8_t port : 3;
+    uint8_t pin : 5;
+} SHARED_MSG_PACKED;
+
+struct onboard_periph_info_s {
+    const char* name;
+    uint8_t rev;
+    uint8_t bus_addr;
+    uint8_t bus_type : 4;
+    uint8_t bus_num : 4;
+    uint8_t num_pin_descriptions;
+    const struct onboard_periph_pin_info_s* pin_descriptions;
+    uint8_t cal_data_fmt;
+    const void* calibration_data;
+} SHARED_MSG_PACKED;
+
+struct hw_info_s {
+    const char* hw_name;
     uint8_t hw_major_version;
     uint8_t hw_minor_version;
+    uint8_t onboard_periph_description_fmt;
+    uint8_t num_onboard_periph_descriptions;
+    const struct onboard_periph_info_s* onboard_periph_descriptions;
 } SHARED_MSG_PACKED;
 
 struct boot_info_msg_s {
     uint8_t local_node_id;
-    const struct hwinfo_s* hwinfo_ptr;
+    const struct hw_info_s* hw_info;
 } SHARED_MSG_PACKED;
 
 union shared_msg_payload_u {

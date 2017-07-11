@@ -24,13 +24,9 @@
 #include "helpers.h"
 #include <string.h>
 #include "shared.h"
+#include "board.h"
 
-// TODO move into some config file
 #define BOOT_DELAY_MS 3000
-#define APP_PAGE_SIZE 2048
-#define HW_NAME "com.proficnc.esc"
-#define HW_MAJOR_VER 1
-#define HW_MINOR_VER 0
 
 struct jump_info_s {
     uint32_t stacktop;
@@ -43,24 +39,30 @@ extern uint8_t _app_sec[], _app_sec_end;
 static bool restart_req = false;
 static uint32_t restart_req_us;
 
-static void do_jump(uint32_t stacktop, uint32_t entrypoint)
-{
-    // offset the vector table
-    SCB_VTOR = (uint32_t)&_app_sec;
-
-    asm volatile(
-        "msr msp, %0	\n"
-        "bx	%1	\n"
-        : : "r"(stacktop), "r"(entrypoint) :);
-
-    for (;;) ;
-}
-
-static void do_boot(void) {
+static void do_command_boot(void) {
     union shared_msg_payload_u msg;
     // boot message is an empty struct, nothing to fill in
     shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
     scb_reset_system();
+}
+
+static void do_boot(void)
+{
+    union shared_msg_payload_u msg;
+    msg.boot_info_msg.local_node_id = uavcan_get_node_id();
+    msg.boot_info_msg.hw_info = &hw_info;
+    shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
+
+    // offset the vector table
+    SCB_VTOR = (uint32_t)&_app_sec;
+
+    struct jump_info_s* app_sec_jump_info = (struct jump_info_s*)_app_sec;
+    asm volatile(
+        "msr msp, %0	\n"
+        "bx	%1	\n"
+        : : "r"(app_sec_jump_info->stacktop), "r"(app_sec_jump_info->entrypoint) :);
+
+    for (;;) ;
 }
 
 static struct {
@@ -191,7 +193,7 @@ static void file_read_response_handler(uint8_t transfer_id, int16_t error, const
 
         if (eof) {
             do_finalize_flash();
-            do_boot();
+            do_command_boot();
         } else {
             flash_state.ofs += data_len;
             do_send_read_request();
@@ -220,8 +222,7 @@ static void bootloader_pre_init(void)
     shared_msg_clear();
 
     if (shared_msg_valid && shared_msgid == SHARED_MSG_BOOT && app_is_valid()) {
-        struct jump_info_s* app_sec_jump_info = (struct jump_info_s*)_app_sec;
-        do_jump(app_sec_jump_info->stacktop, app_sec_jump_info->entrypoint);
+        do_boot();
     }
 }
 
@@ -250,7 +251,7 @@ static void bootloader_update(void)
         }
     } else {
         if (app_is_valid() && millis()-boot_timer_start_ms > BOOT_DELAY_MS) {
-            do_boot();
+            do_command_boot();
         }
     }
 
