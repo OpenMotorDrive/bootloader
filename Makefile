@@ -9,7 +9,7 @@ LDFLAGS := --static -nostartfiles -L$(LIBOPENCM3_DIR)/lib -T$(LDSCRIPT) -Wl,--gc
 
 LDLIBS := -lopencm3_stm32f3 -lm -Wl,--start-group -lc -lgcc -lrdimon -Wl,--end-group
 
-CFLAGS += -std=gnu11 -Os -ffast-math -g -Wdouble-promotion -Wextra -Wshadow -Werror=implicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes -fsingle-precision-constant -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -Isrc -I$(LIBOPENCM3_DIR)/include -I$(LIBCANARD_DIR) -DSTM32F3 -D"CANARD_ASSERT(x)"="do {} while(0)" -DGIT_HASH=0x$(shell git rev-parse --short=8 HEAD) -flto
+CFLAGS += -std=gnu11 -Os -ffast-math -g -Wdouble-promotion -Wextra -Wshadow -Werror=implicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes -fsingle-precision-constant -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -Isrc -I$(LIBOPENCM3_DIR)/include -I$(LIBCANARD_DIR) -DSTM32F3 -D"CANARD_ASSERT(x)"="do {} while(0)" -DGIT_HASH=0x$(shell git rev-parse --short=8 HEAD) -flto -fshort-wchar
 
 COMMON_OBJS := $(addprefix build/,$(addsuffix .o,$(basename $(shell find src -name "*.c"))))
 ELF := build/bin/main.elf
@@ -44,7 +44,7 @@ build/canard.o: $(LIBCANARD_DIR)/canard.c
 .PHONY: $(LIBOPENCM3_DIR)
 $(LIBOPENCM3_DIR):
 	@echo "### BUILDING $@"
-	@$(MAKE) -C $(LIBOPENCM3_DIR)
+	@$(MAKE) -C $(LIBOPENCM3_DIR) CFLAGS="-fshort-wchar"
 
 upload: build/bin/main.elf build/bin/main.bin
 	@echo "### UPLOADING"
