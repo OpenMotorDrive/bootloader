@@ -71,6 +71,7 @@ static struct {
     uint8_t retries;
     uint32_t last_req_ms;
     uint8_t source_node_id;
+    uint32_t last_erased_page;
     char path[201];
 } flash_state;
 
@@ -101,10 +102,9 @@ static bool write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data
     return true;
 }
 
-static void erase_app_sec(void) {
-    for (uint32_t i=0; i<get_app_sec_size(); i+=APP_PAGE_SIZE) {
-        flash_erase_page(&_app_sec[i]);
-    }
+static void erase_app_page(uint32_t page_num) {
+    flash_erase_page(&_app_sec[page_num*APP_PAGE_SIZE]);
+    flash_state.last_erased_page = page_num;
 }
 
 static bool restart_request_handler(void)
@@ -133,7 +133,7 @@ static void do_send_read_request(void) {
 static void do_fail_update(void) {
     uavcan_set_node_mode(UAVCAN_MODE_INITIALIZATION);
     memset(&flash_state, 0, sizeof(flash_state));
-    erase_app_sec();
+    erase_app_page(0);
 }
 
 static void do_finalize_flash(void) {
@@ -153,7 +153,7 @@ static void begin_flash_from_path(uint8_t source_node_id, const char* path)
     flash_state.transfer_id = uavcan_send_file_read_request(flash_state.source_node_id, flash_state.ofs, flash_state.path);
     flash_state.last_req_ms = millis();
 
-    erase_app_sec();
+    erase_app_page(0);
 }
 
 static void uavcan_ready_handler(void) {
@@ -170,6 +170,11 @@ static void file_read_response_handler(uint8_t transfer_id, int16_t error, const
         if (error != 0 || flash_state.ofs+data_len > get_app_sec_size()) {
             do_fail_update();
             return;
+        }
+
+        uint32_t curr_page = (flash_state.ofs+data_len)/APP_PAGE_SIZE;
+        if (curr_page > flash_state.last_erased_page) {
+            erase_app_page(curr_page);
         }
 
         if (flash_state.ofs == 0) {
