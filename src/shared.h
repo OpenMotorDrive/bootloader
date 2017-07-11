@@ -21,8 +21,13 @@ struct firmwareupdate_msg_s {
     char path[201];
 } SHARED_MSG_PACKED;
 
+enum periph_info_pin_function_t {
+    PERIPH_INFO_PIN_FUNCTION_SPI_MISO = 0,
+    PERIPH_INFO_PIN_FUNCTION_SPI_MOSI = 1,
+};
+
 struct onboard_periph_pin_info_s {
-    uint8_t function; // enum defined per-application
+    uint8_t function; // < 127 reserved for standard pin functions defined by periph_info_pin_function_t
     uint8_t port : 3;
     uint8_t pin : 5;
 } SHARED_MSG_PACKED;
@@ -31,8 +36,6 @@ struct onboard_periph_info_s {
     const char* name;
     uint8_t rev;
     uint8_t bus_addr;
-    uint8_t bus_type : 4;
-    uint8_t bus_num : 4;
     uint8_t num_pin_descriptions;
     const struct onboard_periph_pin_info_s* pin_descriptions;
     uint8_t cal_data_fmt;
