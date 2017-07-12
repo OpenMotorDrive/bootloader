@@ -18,14 +18,15 @@
 #include <libopencm3/stm32/gpio.h>
 #include "can.h"
 
-void canbus_init(void) {
+void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin) {
     // Enable peripheral clock
     rcc_periph_clock_enable(RCC_CAN);
-    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_GPIOA+rx_port);
+    rcc_periph_clock_enable(RCC_GPIOA+tx_port);
 
     // Enable GPIO
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO11|GPIO12);
-    gpio_set_af(GPIOA, GPIO_AF9, GPIO11|GPIO12);
+    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, (1<<rx_pin)|(1<<tx_pin));
+    gpio_set_af(GPIOA, GPIO_AF9, (1<<rx_pin)|(1<<tx_pin));
 
     can_reset(CAN1);
     can_init(

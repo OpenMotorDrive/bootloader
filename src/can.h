@@ -26,6 +26,6 @@ struct canbus_msg {
     uint8_t data[8];
 };
 
-void canbus_init(void);
+void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin);
 bool canbus_send_message(struct canbus_msg* msg);
 bool canbus_recv_message(struct canbus_msg* msg);

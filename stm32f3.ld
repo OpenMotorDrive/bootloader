@@ -1,7 +1,7 @@
 /* Define memory regions. */
 MEMORY
 {
-    rom (rx) :          ORIGIN = 0x08000000,              LENGTH = 10K
+    bl (rx) :          ORIGIN = 0x08000000,              LENGTH = 10K
     app (rx) :          ORIGIN = 0x08000000+10K,          LENGTH = 64K-10K
     ram (rwx) :         ORIGIN = 0x20000000,              LENGTH = 16K-256
     app_bl_shared (rwx) : ORIGIN = 0x20000000+(16K-256),  LENGTH = 256
@@ -22,7 +22,7 @@ SECTIONS
         . = ALIGN(4);
         *(.rodata*)	/* Read-only data */
         . = ALIGN(4);
-    } >rom
+    } >bl
 
     .app_bl_shared (NOLOAD) : {
     } >app_bl_shared
@@ -37,21 +37,21 @@ SECTIONS
         __preinit_array_start = .;
         KEEP (*(.preinit_array))
         __preinit_array_end = .;
-    } >rom
+    } >bl
     .init_array : {
         . = ALIGN(4);
         __init_array_start = .;
         KEEP (*(SORT(.init_array.*)))
         KEEP (*(.init_array))
         __init_array_end = .;
-    } >rom
+    } >bl
     .fini_array : {
         . = ALIGN(4);
         __fini_array_start = .;
         KEEP (*(.fini_array))
         KEEP (*(SORT(.fini_array.*)))
         __fini_array_end = .;
-    } >rom
+    } >bl
 
     /*
         * Another section used by C++ stuff, appears when using newlib with
@@ -59,12 +59,12 @@ SECTIONS
         */
     .ARM.extab : {
         *(.ARM.extab*)
-    } >rom
+    } >bl
     .ARM.exidx : {
         __exidx_start = .;
         *(.ARM.exidx*)
         __exidx_end = .;
-    } >rom
+    } >bl
 
     . = ALIGN(4);
     _etext = .;
@@ -74,7 +74,7 @@ SECTIONS
         *(.data*)	/* Read-write initialized data */
         . = ALIGN(4);
         _edata = .;
-    } >ram AT >rom
+    } >ram AT >bl
     _data_loadaddr = LOADADDR(.data);
 
     .bss : {

@@ -17,7 +17,7 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/flash.h>
 
-void clock_init(void)
+void clock_init_stm32f302k8_8mhz_hse(void)
 {
     rcc_osc_on(RCC_HSE);
     rcc_wait_for_osc_ready(RCC_HSE);

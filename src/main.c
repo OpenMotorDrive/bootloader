@@ -24,9 +24,12 @@
 #include "helpers.h"
 #include <string.h>
 #include "shared.h"
-#include "board.h"
 
-#define BOOT_DELAY_MS 3000
+#ifdef STM32F3
+#define APP_PAGE_SIZE 2048
+#endif
+
+#define BOOT_DELAY_MS 20000
 
 struct jump_info_s {
     uint32_t stacktop;
@@ -35,6 +38,9 @@ struct jump_info_s {
 
 // NOTE: _app_sec and _app_sec_end symbols shall be defined in the ld script
 extern uint8_t _app_sec[], _app_sec_end;
+
+// NOTE: _hw_info defined in the board config file
+extern struct hw_info_s _hw_info;
 
 static bool restart_req = false;
 static uint32_t restart_req_us;
@@ -50,8 +56,8 @@ static void do_boot(void)
 {
     union shared_msg_payload_u msg;
     msg.boot_info_msg.local_node_id = uavcan_get_node_id();
-    msg.boot_info_msg.hw_info = &hw_info;
-    shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
+    msg.boot_info_msg.hw_info = &_hw_info;
+    shared_msg_finalize_and_write(SHARED_MSG_BOOT_INFO, &msg);
 
     // offset the vector table
     SCB_VTOR = (uint32_t)&_app_sec;
@@ -234,6 +240,13 @@ static void bootloader_init(void)
     uavcan_set_file_read_response_cb(file_read_response_handler);
     boot_timer_start_ms = millis();
 
+    struct uavcan_hw_info_s uavcan_hw_info = {
+        .hw_name = _hw_info.hw_name,
+        .hw_major_version = _hw_info.hw_major_version,
+        .hw_minor_version = _hw_info.hw_minor_version
+    };
+    uavcan_set_hw_info(uavcan_hw_info);
+
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE && shared_msg.firmwareupdate_msg.local_node_id != 0) {
         uavcan_set_node_id(shared_msg.firmwareupdate_msg.local_node_id);
     }
@@ -260,10 +273,30 @@ static void bootloader_update(void)
 int main(void)
 {
     bootloader_pre_init();
-    clock_init();
+
+    // clock init
+    {
+        const struct onboard_periph_info_s* hse_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "OSC_HSE");
+
+        if (hse_periph_info && hse_periph_info->cal_data_fmt == CAL_DATA_FMT_FLOAT && *(float*)hse_periph_info->cal_data == 8e6f) {
+            clock_init_stm32f302k8_8mhz_hse();
+        }
+    }
+
     timing_init();
-    canbus_init();
-    uavcan_init();
+
+    // CANbus init
+    {
+        const struct onboard_periph_info_s* can1_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "CAN1");
+        if (can1_periph_info) {
+            const struct onboard_periph_pin_info_s* canbus_rx = shared_hwinfo_find_periph_pin_info(can1_periph_info, PERIPH_INFO_PIN_FUNCTION_CAN1_RX);
+            const struct onboard_periph_pin_info_s* canbus_tx = shared_hwinfo_find_periph_pin_info(can1_periph_info, PERIPH_INFO_PIN_FUNCTION_CAN1_TX);
+            canbus_init(canbus_rx->port, canbus_rx->pin, canbus_tx->port, canbus_tx->pin);
+            uavcan_init();
+        }
+    }
+
+
     bootloader_init();
 
     // main loop

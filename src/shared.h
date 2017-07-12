@@ -9,7 +9,8 @@
 
 enum shared_msg_t {
     SHARED_MSG_BOOT = 0,
-    SHARED_MSG_FIRMWAREUPDATE = 0,
+    SHARED_MSG_FIRMWAREUPDATE = 1,
+    SHARED_MSG_BOOT_INFO = 2,
 };
 
 struct boot_msg_s {
@@ -21,34 +22,51 @@ struct firmwareupdate_msg_s {
     char path[201];
 } SHARED_MSG_PACKED;
 
+enum cal_data_fmt_t {
+    CAL_DATA_FMT_NO_DATA = 0,
+    CAL_DATA_FMT_FLOAT = 1,
+};
+
 enum periph_info_pin_function_t {
-    PERIPH_INFO_PIN_FUNCTION_SPI_MISO = 0,
-    PERIPH_INFO_PIN_FUNCTION_SPI_MOSI = 1,
+    PERIPH_INFO_PIN_FUNCTION_UNKNOWN = 0,
+    PERIPH_INFO_PIN_FUNCTION_EXT_OSC,
+    PERIPH_INFO_PIN_FUNCTION_CAN1_RX,
+    PERIPH_INFO_PIN_FUNCTION_CAN1_TX,
+    PERIPH_INFO_PIN_FUNCTION_CAN2_RX,
+    PERIPH_INFO_PIN_FUNCTION_CAN2_TX,
+    PERIPH_INFO_PIN_FUNCTION_CAN3_RX,
+    PERIPH_INFO_PIN_FUNCTION_CAN3_TX,
+    PERIPH_INFO_PIN_FUNCTION_SPI1_MISO = 21,
+    PERIPH_INFO_PIN_FUNCTION_SPI1_MOSI,
+    PERIPH_INFO_PIN_FUNCTION_SPI1_SCLK,
+    PERIPH_INFO_PIN_FUNCTION_SPI1_NCS,
 };
 
 struct onboard_periph_pin_info_s {
-    uint8_t function; // < 127 reserved for standard pin functions defined by periph_info_pin_function_t
-    uint8_t port : 3;
-    uint8_t pin : 5;
+    uint16_t function;
+    uint8_t port;
+    uint8_t pin;
 } SHARED_MSG_PACKED;
 
 struct onboard_periph_info_s {
     const char* name;
     uint8_t rev;
     uint8_t bus_addr;
-    uint8_t num_pin_descriptions;
-    const struct onboard_periph_pin_info_s* pin_descriptions;
-    uint8_t cal_data_fmt;
-    const void* calibration_data;
+    uint8_t num_pin_descs;
+    const struct onboard_periph_pin_info_s* pin_descs;
+    uint8_t cal_data_fmt; // < 127 reserved for standard calibration data formats defined by enum cal_data_fmt_t
+    const void* cal_data;
 } SHARED_MSG_PACKED;
 
 struct hw_info_s {
     const char* hw_name;
     uint8_t hw_major_version;
     uint8_t hw_minor_version;
-    uint8_t onboard_periph_description_fmt;
-    uint8_t num_onboard_periph_descriptions;
-    const struct onboard_periph_info_s* onboard_periph_descriptions;
+    const char* mcu_model;
+    const char* mcu_clock;
+    uint8_t onboard_periph_desc_fmt;
+    uint8_t num_onboard_periph_descs;
+    const struct onboard_periph_info_s* onboard_periph_descs;
 } SHARED_MSG_PACKED;
 
 struct boot_info_msg_s {
@@ -65,3 +83,6 @@ union shared_msg_payload_u {
 bool shared_msg_check_and_retreive(enum shared_msg_t* msgid, union shared_msg_payload_u* msg_payload);
 void shared_msg_finalize_and_write(enum shared_msg_t msgid, const union shared_msg_payload_u* msg_payload);
 void shared_msg_clear(void);
+
+const struct onboard_periph_info_s* shared_hwinfo_find_periph_info(const struct hw_info_s* hw_info, const char* periph_name);
+const struct onboard_periph_pin_info_s* shared_hwinfo_find_periph_pin_info(const struct onboard_periph_info_s* periph_info, uint16_t pin_function);

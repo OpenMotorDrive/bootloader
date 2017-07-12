@@ -1,4 +1,3 @@
-GCC_DIR := /opt/gcc-arm-none-eabi-4_9-2015q3
 LIBOPENCM3_DIR := submodules/libopencm3
 LIBCANARD_DIR := submodules/libcanard
 LDSCRIPT := stm32f3.ld
@@ -12,13 +11,14 @@ LDLIBS := -lopencm3_stm32f3 -lm -Wl,--start-group -lc -lgcc -lrdimon -Wl,--end-g
 CFLAGS += -std=gnu11 -Os -ffast-math -g -Wdouble-promotion -Wextra -Wshadow -Werror=implicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes -fsingle-precision-constant -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -Isrc -I$(LIBOPENCM3_DIR)/include -I$(LIBCANARD_DIR) -DSTM32F3 -D"CANARD_ASSERT(x)"="do {} while(0)" -DGIT_HASH=0x$(shell git rev-parse --short=8 HEAD) -flto -fshort-wchar
 
 COMMON_OBJS := $(addprefix build/,$(addsuffix .o,$(basename $(shell find src -name "*.c"))))
+BOARD_CONFIG_OBJ := $(addprefix build/,$(addsuffix .o,$(basename $(BOARD_CONFIG_FILE))))
 ELF := build/bin/main.elf
 BIN := build/bin/main.bin
 
 .PHONY: all
 all: $(LIBOPENCM3_DIR) $(BIN)
 
-build/bin/%.elf: $(COMMON_OBJS) build/canard.o
+build/bin/%.elf: $(BOARD_CONFIG_OBJ) $(COMMON_OBJS) build/canard.o
 	@echo "### BUILDING $@"
 	@mkdir -p "$(dir $@)"
 	@arm-none-eabi-gcc $(LDFLAGS) $(ARCH_FLAGS) $^ $(LDLIBS) -o $@
@@ -29,8 +29,8 @@ build/bin/%.bin: build/bin/%.elf
 	@mkdir -p "$(dir $@)"
 	@arm-none-eabi-objcopy -O binary $< $@
 
-.PRECIOUS: build/src/%.o
-build/src/%.o: src/%.c $(LIBOPENCM3_DIR)
+.PRECIOUS: build/%.o
+build/%.o: %.c $(LIBOPENCM3_DIR)
 	@echo "### BUILDING $@"
 	@mkdir -p "$(dir $@)"
 	@arm-none-eabi-gcc $(CFLAGS) $(ARCH_FLAGS) -S $< -o $(patsubst %.o,%.S,$@)

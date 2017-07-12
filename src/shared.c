@@ -23,6 +23,10 @@ static int16_t get_payload_length(enum shared_msg_t msgid) {
     switch(msgid) {
         case SHARED_MSG_BOOT:
             return sizeof(struct boot_msg_s);
+        case SHARED_MSG_FIRMWAREUPDATE:
+            return sizeof(struct firmwareupdate_msg_s);
+        case SHARED_MSG_BOOT_INFO:
+            return sizeof(struct boot_info_msg_s);
     };
 
     return -1;
@@ -68,4 +72,22 @@ void shared_msg_finalize_and_write(enum shared_msg_t msgid, const union shared_m
 
 void shared_msg_clear(void) {
     memset(&_app_bl_shared_sec, 0, sizeof(_app_bl_shared_sec));
+}
+
+const struct onboard_periph_info_s* shared_hwinfo_find_periph_info(const struct hw_info_s* hw_info, const char* periph_name) {
+    for (uint8_t i=0; i<hw_info->num_onboard_periph_descs; i++) {
+        if (!strcmp(hw_info->onboard_periph_descs[i].name, periph_name)) {
+            return &hw_info->onboard_periph_descs[i];
+        }
+    }
+    return 0;
+}
+
+const struct onboard_periph_pin_info_s* shared_hwinfo_find_periph_pin_info(const struct onboard_periph_info_s* periph_info, uint16_t pin_function) {
+    for (uint8_t i=0; i<periph_info->num_pin_descs; i++) {
+        if (periph_info->pin_descs[i].function == pin_function) {
+            return &periph_info->pin_descs[i];
+        }
+    }
+    return 0;
 }

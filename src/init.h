@@ -15,6 +15,4 @@
 
 #pragma once
 
-void clock_init(void);
-void usart_init(void);
-void spi_init(void);
+void clock_init_stm32f302k8_8mhz_hse(void);

@@ -7,10 +7,6 @@
 #include <canard.h>
 #include <libopencm3/stm32/desig.h>
 
-#define APP_VERSION_MAJOR                                           0
-#define APP_VERSION_MINOR                                           1
-#define APP_NODE_NAME                                               "org.jc.bl"
-
 #define BIT_LEN_TO_SIZE(x) ((x+7)/8)
 
 #define UAVCAN_NODE_ID_ALLOCATION_DATA_TYPE_ID                      1
@@ -68,6 +64,8 @@
 #define UAVCAN_NODE_HEALTH_CRITICAL                                 3
 
 #define UNIQUE_ID_LENGTH_BYTES                                      16
+
+static struct uavcan_hw_info_s hw_info;
 
 static restart_handler_ptr restart_cb;
 static file_beginfirmwareupdate_handler_ptr file_beginfirmwareupdate_cb;
@@ -202,6 +200,11 @@ void uavcan_set_file_beginfirmwareupdate_cb(file_beginfirmwareupdate_handler_ptr
 void uavcan_set_file_read_response_cb(file_read_response_handler_ptr cb)
 {
     file_read_response_cb = cb;
+}
+
+void uavcan_set_hw_info(struct uavcan_hw_info_s new_hw_info)
+{
+    hw_info = new_hw_info;
 }
 
 void uavcan_send_debug_key_value(const char* name, float val)
@@ -371,8 +374,8 @@ static void handle_get_node_info_request(CanardInstance* ins, CanardRxTransfer* 
     makeNodeStatusMessage(buffer);
 
     // Version
-    buffer[7] = APP_VERSION_MAJOR;
-    buffer[8] = APP_VERSION_MINOR;
+    buffer[7] = hw_info.hw_major_version;
+    buffer[8] = hw_info.hw_minor_version;
     buffer[9] = 1;                          // Optional field flags, VCS commit is set
 
     // Git hash
@@ -383,8 +386,8 @@ static void handle_get_node_info_request(CanardInstance* ins, CanardRxTransfer* 
     memcpy(&buffer[24], node_unique_id, sizeof(node_unique_id));
 
     // Name
-    const size_t name_len = strlen(APP_NODE_NAME);
-    memcpy(&buffer[41], APP_NODE_NAME, name_len);
+    const size_t name_len = strlen(hw_info.hw_name);
+    memcpy(&buffer[41], hw_info.hw_name, name_len);
 
     const size_t total_size = 41 + name_len;
 
