@@ -32,10 +32,12 @@ struct uavcan_transfer_info_s {
     uint8_t priority;
 };
 
-struct uavcan_hw_info_s {
+struct uavcan_node_info_s {
     const char* hw_name;
     uint8_t hw_major_version;
     uint8_t hw_minor_version;
+    uint8_t sw_major_version;
+    uint8_t sw_minor_version;
 };
 
 typedef bool (*restart_handler_ptr)(void);
@@ -52,7 +54,7 @@ void uavcan_set_file_read_response_cb(file_read_response_handler_ptr cb);
 void uavcan_set_node_mode(enum uavcan_node_mode_t mode);
 void uavcan_set_node_id(uint8_t node_id);
 uint8_t uavcan_get_node_id(void);
-void uavcan_set_hw_info(struct uavcan_hw_info_s new_hw_info);
+void uavcan_set_node_info(struct uavcan_node_info_s new_hw_info);
 
 void uavcan_send_debug_key_value(const char* name, float val);
 void uavcan_send_debug_logmessage(enum uavcan_loglevel_t log_level, const char* source, const char* text);

@@ -1,12 +1,13 @@
 #include "uavcan.h"
 #include "can.h"
 #include "timing.h"
-#include "helpers.h"
 #include <stdlib.h>
 #include <string.h>
 #include <canard.h>
 #include <libopencm3/stm32/desig.h>
 
+#define UNUSED(x) ((void)x)
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define BIT_LEN_TO_SIZE(x) ((x+7)/8)
 
 #define UAVCAN_NODE_ID_ALLOCATION_DATA_TYPE_ID                      1
@@ -65,7 +66,7 @@
 
 #define UNIQUE_ID_LENGTH_BYTES                                      16
 
-static struct uavcan_hw_info_s hw_info;
+static struct uavcan_node_info_s node_info;
 
 static restart_handler_ptr restart_cb;
 static file_beginfirmwareupdate_handler_ptr file_beginfirmwareupdate_cb;
@@ -202,9 +203,9 @@ void uavcan_set_file_read_response_cb(file_read_response_handler_ptr cb)
     file_read_response_cb = cb;
 }
 
-void uavcan_set_hw_info(struct uavcan_hw_info_s new_hw_info)
+void uavcan_set_node_info(struct uavcan_node_info_s new_node_info)
 {
-    hw_info = new_hw_info;
+    node_info = new_node_info;
 }
 
 void uavcan_send_debug_key_value(const char* name, float val)
@@ -373,21 +374,24 @@ static void handle_get_node_info_request(CanardInstance* ins, CanardRxTransfer* 
     memset(buffer, 0, UAVCAN_GET_NODE_INFO_RESPONSE_MAX_SIZE);
     makeNodeStatusMessage(buffer);
 
-    // Version
-    buffer[7] = hw_info.hw_major_version;
-    buffer[8] = hw_info.hw_minor_version;
+    // Software Version
+    buffer[7] = node_info.sw_major_version;
+    buffer[8] = node_info.sw_minor_version;
     buffer[9] = 1;                          // Optional field flags, VCS commit is set
 
     // Git hash
     uint32_t u32 = GIT_HASH;
     canardEncodeScalar(buffer, 80, 32, &u32);
 
+    buffer[22] = node_info.hw_major_version;
+    buffer[23] = node_info.hw_minor_version;
+
     // Unique ID
     memcpy(&buffer[24], node_unique_id, sizeof(node_unique_id));
 
     // Name
-    const size_t name_len = strlen(hw_info.hw_name);
-    memcpy(&buffer[41], hw_info.hw_name, name_len);
+    const size_t name_len = strlen(node_info.hw_name);
+    memcpy(&buffer[41], node_info.hw_name, name_len);
 
     const size_t total_size = 41 + name_len;
 

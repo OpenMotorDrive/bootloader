@@ -21,15 +21,15 @@
 #include "uavcan.h"
 #include "flash.h"
 #include <libopencm3/cm3/scb.h>
-#include "helpers.h"
 #include <string.h>
-#include "shared.h"
+#include <bootloader/shared.h>
+#include <stdlib.h>
 
 #ifdef STM32F3
 #define APP_PAGE_SIZE 2048
 #endif
 
-#define BOOT_DELAY_MS 20000
+#define BOOT_DELAY_MS 5000
 
 struct jump_info_s {
     uint32_t stacktop;
@@ -40,7 +40,7 @@ struct jump_info_s {
 extern uint8_t _app_sec[], _app_sec_end;
 
 // NOTE: _hw_info defined in the board config file
-extern struct hw_info_s _hw_info;
+extern struct shared_hw_info_s _hw_info;
 
 static bool restart_req = false;
 static uint32_t restart_req_us;
@@ -110,9 +110,24 @@ static bool write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data
     return true;
 }
 
-static void erase_app_page(uint32_t page_num) {
-    flash_erase_page(&_app_sec[page_num*APP_PAGE_SIZE]);
-    flash_state.last_erased_page = page_num;
+static bool verify_area_erased(void* origin, uint32_t len) {
+    for (uint32_t i=0; i<len; i++) {
+        if (((uint8_t*)origin)[i] != 0xff) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool erase_app_page(uint32_t page_num) {
+//     char temp[33];
+//     uavcan_send_debug_logmessage(UAVCAN_LOGLEVEL_DEBUG, "", itoa((uint32_t)&_app_sec[page_num*APP_PAGE_SIZE], temp, 16));
+
+    if (flash_erase_page(&_app_sec[page_num*APP_PAGE_SIZE]) && verify_area_erased(&_app_sec[page_num*APP_PAGE_SIZE], APP_PAGE_SIZE)) {
+        flash_state.last_erased_page = page_num;
+        return true;
+    }
+    return false;
 }
 
 static bool restart_request_handler(void)
@@ -276,9 +291,9 @@ int main(void)
 
     // clock init
     {
-        const struct onboard_periph_info_s* hse_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "OSC_HSE");
+        const struct shared_onboard_periph_info_s* hse_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "OSC_HSE");
 
-        if (hse_periph_info && hse_periph_info->cal_data_fmt == CAL_DATA_FMT_FLOAT && *(float*)hse_periph_info->cal_data == 8e6f) {
+        if (hse_periph_info && hse_periph_info->cal_data_fmt == SHARED_PERIPH_CAL_DATA_FMT_FLOAT && *(float*)hse_periph_info->cal_data == 8e6f) {
             clock_init_stm32f302k8_8mhz_hse();
         }
     }
@@ -287,10 +302,10 @@ int main(void)
 
     // CANbus init
     {
-        const struct onboard_periph_info_s* can1_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "CAN1");
+        const struct shared_onboard_periph_info_s* can1_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "CAN1");
         if (can1_periph_info) {
-            const struct onboard_periph_pin_info_s* canbus_rx = shared_hwinfo_find_periph_pin_info(can1_periph_info, PERIPH_INFO_PIN_FUNCTION_CAN1_RX);
-            const struct onboard_periph_pin_info_s* canbus_tx = shared_hwinfo_find_periph_pin_info(can1_periph_info, PERIPH_INFO_PIN_FUNCTION_CAN1_TX);
+            const struct shared_onboard_periph_pin_info_s* canbus_rx = shared_hwinfo_find_periph_pin_info(can1_periph_info, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_RX);
+            const struct shared_onboard_periph_pin_info_s* canbus_tx = shared_hwinfo_find_periph_pin_info(can1_periph_info, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_TX);
             canbus_init(canbus_rx->port, canbus_rx->pin, canbus_tx->port, canbus_tx->pin);
             uavcan_init();
         }
