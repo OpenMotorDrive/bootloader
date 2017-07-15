@@ -29,9 +29,9 @@
 #define APP_PAGE_SIZE 2048
 #endif
 
-#define BOOT_DELAY_MS 5000
+#define BOOT_DELAY_STARTUP_MS 0
 
-struct jump_info_s {
+struct app_header_s {
     uint32_t stacktop;
     uint32_t entrypoint;
 };
@@ -45,35 +45,8 @@ extern struct shared_hw_info_s _hw_info;
 static bool restart_req = false;
 static uint32_t restart_req_us;
 
-static void do_command_boot(void) {
-    union shared_msg_payload_u msg;
-    // boot message is an empty struct, nothing to fill in
-    shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
-    scb_reset_system();
-}
-
-static void do_boot(void)
-{
-    union shared_msg_payload_u msg;
-    msg.boot_info_msg.local_node_id = uavcan_get_node_id();
-    msg.boot_info_msg.hw_info = &_hw_info;
-    shared_msg_finalize_and_write(SHARED_MSG_BOOT_INFO, &msg);
-
-    // offset the vector table
-    SCB_VTOR = (uint32_t)&_app_sec;
-
-    struct jump_info_s* app_sec_jump_info = (struct jump_info_s*)_app_sec;
-    asm volatile(
-        "msr msp, %0	\n"
-        "bx	%1	\n"
-        : : "r"(app_sec_jump_info->stacktop), "r"(app_sec_jump_info->entrypoint) :);
-
-    for (;;) ;
-}
-
 static struct {
     bool in_progress;
-    uint8_t first_words[sizeof(struct jump_info_s)];
     uint32_t ofs;
     uint8_t transfer_id;
     uint8_t retries;
@@ -83,51 +56,130 @@ static struct {
     char path[201];
 } flash_state;
 
-static uint32_t boot_timer_start_ms;
+static struct {
+    bool enable;
+    uint32_t start_ms;
+    uint32_t length_ms;
+} boot_timer_state;
+
 static enum shared_msg_t shared_msgid;
 static union shared_msg_payload_u shared_msg;
 static bool shared_msg_valid;
+
+static struct {
+    const struct shared_app_descriptor_s* shared_app_descriptor;
+    uint64_t image_crc_computed;
+    bool image_crc_correct;
+} app_info;
+
+static void start_boot_timer(uint32_t length_ms) {
+    boot_timer_state.enable = true;
+    boot_timer_state.start_ms = millis();
+    boot_timer_state.length_ms = length_ms;
+}
 
 static uint32_t get_app_sec_size(void) {
     return (uint32_t)&_app_sec_end - (uint32_t)&_app_sec[0];
 }
 
-static bool write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data_len)
+static void set_uavcan_node_info(void)
 {
-    if (ofs%2 != 0 || data_len%2 != 0) {
-        return false;
+    struct uavcan_node_info_s uavcan_node_info;
+    memset(&uavcan_node_info, 0, sizeof(uavcan_node_info));
+    uavcan_node_info.hw_name = _hw_info.hw_name;
+    uavcan_node_info.hw_major_version = _hw_info.hw_major_version;
+    uavcan_node_info.hw_minor_version = _hw_info.hw_minor_version;
+
+    if (app_info.shared_app_descriptor) {
+        uavcan_node_info.sw_major_version = app_info.shared_app_descriptor->major_version;
+        uavcan_node_info.sw_minor_version = app_info.shared_app_descriptor->minor_version;
+        uavcan_node_info.sw_vcs_commit_available = true;
+        uavcan_node_info.sw_vcs_commit = app_info.shared_app_descriptor->vcs_commit;
+        uavcan_node_info.sw_image_crc_available = true;
+        uavcan_node_info.sw_image_crc = app_info.shared_app_descriptor->image_crc;
     }
+
+    uavcan_set_node_info(uavcan_node_info);
+}
+
+static void update_app_info(void)
+{
+    memset(&app_info, 0, sizeof(app_info));
+
+    struct app_header_s* app_header = (struct app_header_s*)_app_sec;
+    if (app_header->entrypoint == 0xffffffff) {
+        return;
+    }
+
+    app_info.shared_app_descriptor = shared_find_app_descriptor(_app_sec, get_app_sec_size());
+
+    const struct shared_app_descriptor_s* descriptor = app_info.shared_app_descriptor;
+
+    if (descriptor && descriptor->image_size <= get_app_sec_size()) {
+        uint32_t pre_crc_len = ((uint32_t)&descriptor->image_crc) - ((uint32_t)_app_sec);
+        uint32_t post_crc_len = descriptor->image_size - pre_crc_len - sizeof(uint64_t);
+        uint8_t* pre_crc_origin = _app_sec;
+        uint8_t* post_crc_origin = (uint8_t*)((&descriptor->image_crc)+1);
+        uint64_t zero64 = 0;
+
+        app_info.image_crc_computed = shared_crc64_we(pre_crc_origin, pre_crc_len, 0);
+        app_info.image_crc_computed = shared_crc64_we((uint8_t*)&zero64, sizeof(zero64), app_info.image_crc_computed);
+        app_info.image_crc_computed = shared_crc64_we(post_crc_origin, post_crc_len, app_info.image_crc_computed);
+
+        app_info.image_crc_correct = (app_info.image_crc_computed == descriptor->image_crc);
+    }
+}
+
+static void check_and_boot(void)
+{
+    if (!app_info.image_crc_correct) {
+        return;
+    }
+
+    union shared_msg_payload_u msg;
+    msg.boot_msg.canbus_info.local_node_id = uavcan_get_node_id();
+    msg.boot_msg.canbus_info.baudrate = -1;
+
+    shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
+
+    scb_reset_system();
+}
+
+static void do_boot(void)
+{
+    union shared_msg_payload_u msg;
+    shared_msg.boot_info_msg.canbus_info.local_node_id = uavcan_get_node_id();
+    msg.boot_msg.canbus_info.baudrate = -1;
+    shared_msg.boot_info_msg.hw_info = &_hw_info;
+
+    shared_msg_finalize_and_write(SHARED_MSG_BOOT_INFO, &msg);
+
+    struct app_header_s* app_header = (struct app_header_s*)_app_sec;
+
+    // offset the vector table
+    SCB_VTOR = (uint32_t)&(app_header->stacktop);
+
+    asm volatile(
+        "msr msp, %0	\n"
+        "bx	%1	\n"
+        : : "r"(app_header->stacktop), "r"(app_header->entrypoint) :);
+
+    for (;;) ;
+}
+
+static void write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data_len)
+{
     for (uint16_t i=0; i<data_len; i+=sizeof(uint16_t)) {
         uint16_t* src_ptr = (uint16_t*)&data[i];
         uint16_t* dest_ptr = (uint16_t*)&_app_sec[i+ofs];
 
         flash_program_half_word(dest_ptr, src_ptr);
-
-        if (*dest_ptr != *src_ptr) {
-            return false;
-        }
     }
-    return true;
 }
 
-static bool verify_area_erased(void* origin, uint32_t len) {
-    for (uint32_t i=0; i<len; i++) {
-        if (((uint8_t*)origin)[i] != 0xff) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool erase_app_page(uint32_t page_num) {
-//     char temp[33];
-//     uavcan_send_debug_logmessage(UAVCAN_LOGLEVEL_DEBUG, "", itoa((uint32_t)&_app_sec[page_num*APP_PAGE_SIZE], temp, 16));
-
-    if (flash_erase_page(&_app_sec[page_num*APP_PAGE_SIZE]) && verify_area_erased(&_app_sec[page_num*APP_PAGE_SIZE], APP_PAGE_SIZE)) {
-        flash_state.last_erased_page = page_num;
-        return true;
-    }
-    return false;
+static void erase_app_page(uint32_t page_num) {
+    flash_erase_page(&_app_sec[page_num*APP_PAGE_SIZE]);
+    flash_state.last_erased_page = page_num;
 }
 
 static bool restart_request_handler(void)
@@ -135,11 +187,6 @@ static bool restart_request_handler(void)
     restart_req = true;
     restart_req_us = micros();
     return true;
-}
-
-static bool app_is_valid(void) {
-    struct jump_info_s* app_sec_jump_info = (struct jump_info_s*)_app_sec;
-    return app_sec_jump_info->stacktop != 0xffffffff && app_sec_jump_info->entrypoint != 0xffffffff;
 }
 
 static void do_resend_read_request(void) {
@@ -154,20 +201,15 @@ static void do_send_read_request(void) {
 }
 
 static void do_fail_update(void) {
-    uavcan_set_node_mode(UAVCAN_MODE_INITIALIZATION);
+    uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
     memset(&flash_state, 0, sizeof(flash_state));
     erase_app_page(0);
-}
-
-static void do_finalize_flash(void) {
-    if(!write_data_to_flash(0, flash_state.first_words, sizeof(flash_state.first_words))) {
-        do_fail_update();
-    }
 }
 
 static void begin_flash_from_path(uint8_t source_node_id, const char* path)
 {
     uavcan_set_node_mode(UAVCAN_MODE_SOFTWARE_UPDATE);
+    boot_timer_state.enable = false;
     memset(&flash_state, 0, sizeof(flash_state));
     flash_state.in_progress = true;
     flash_state.ofs = 0;
@@ -179,9 +221,14 @@ static void begin_flash_from_path(uint8_t source_node_id, const char* path)
     erase_app_page(0);
 }
 
-static void uavcan_ready_handler(void) {
-    boot_timer_start_ms = millis();
+static void concat_int64_hex(char* dest, uint64_t val) {
+    char temp[10];
+    for(int8_t i=15; i>=0; i--) {
+        strcat(dest,itoa((val>>(4*i))&0xf,temp,16));
+    }
+}
 
+static void uavcan_ready_handler(void) {
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE) {
         begin_flash_from_path(shared_msg.firmwareupdate_msg.source_node_id, shared_msg.firmwareupdate_msg.path);
     }
@@ -200,21 +247,14 @@ static void file_read_response_handler(uint8_t transfer_id, int16_t error, const
             erase_app_page(curr_page);
         }
 
-        if (flash_state.ofs == 0) {
-            size_t first_words_size = sizeof(flash_state.first_words);
-            memcpy(flash_state.first_words, data, first_words_size);
-            if (!write_data_to_flash(flash_state.ofs+first_words_size, &data[first_words_size], data_len-first_words_size)) {
-                do_fail_update();
-            }
-        } else {
-            if (!write_data_to_flash(flash_state.ofs, data, data_len)) {
-                do_fail_update();
-            }
-        }
+        write_data_to_flash(flash_state.ofs, data, data_len);
 
         if (eof) {
-            do_finalize_flash();
-            do_command_boot();
+            uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
+            flash_state.in_progress = false;
+            update_app_info();
+            set_uavcan_node_info();
+            check_and_boot();
         } else {
             flash_state.ofs += data_len;
             do_send_read_request();
@@ -242,34 +282,36 @@ static void bootloader_pre_init(void)
     shared_msg_valid = shared_msg_check_and_retreive(&shared_msgid, &shared_msg);
     shared_msg_clear();
 
-    if (shared_msg_valid && shared_msgid == SHARED_MSG_BOOT && app_is_valid()) {
+    if (shared_msg_valid && shared_msgid == SHARED_MSG_BOOT) {
         do_boot();
     }
 }
 
 static void bootloader_init(void)
 {
+    update_app_info();
+    set_uavcan_node_info();
     uavcan_set_uavcan_ready_cb(uavcan_ready_handler);
     uavcan_set_restart_cb(restart_request_handler);
     uavcan_set_file_beginfirmwareupdate_cb(file_beginfirmwareupdate_handler);
     uavcan_set_file_read_response_cb(file_read_response_handler);
-    boot_timer_start_ms = millis();
+    uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
 
-    struct uavcan_hw_info_s uavcan_hw_info = {
-        .hw_name = _hw_info.hw_name,
-        .hw_major_version = _hw_info.hw_major_version,
-        .hw_minor_version = _hw_info.hw_minor_version
-    };
-    uavcan_set_hw_info(uavcan_hw_info);
+#if BOOT_DELAY_STARTUP_MS != 0
+    start_boot_timer(BOOT_DELAY_STARTUP_MS);
+#endif
 
-    if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE && shared_msg.firmwareupdate_msg.local_node_id != 0) {
-        uavcan_set_node_id(shared_msg.firmwareupdate_msg.local_node_id);
+    if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE && shared_msg.firmwareupdate_msg.canbus_info.local_node_id != 0) {
+        uavcan_set_node_id(shared_msg.firmwareupdate_msg.canbus_info.local_node_id);
     }
 }
 
 static void bootloader_update(void)
 {
     if (restart_req && (micros() - restart_req_us) > 1000) {
+        // try to boot if image is valid
+        check_and_boot();
+        // otherwise, just reset
         scb_reset_system();
     }
 
@@ -278,8 +320,8 @@ static void bootloader_update(void)
             do_resend_read_request();
         }
     } else {
-        if (app_is_valid() && millis()-boot_timer_start_ms > BOOT_DELAY_MS) {
-            do_command_boot();
+        if (boot_timer_state.enable && millis()-boot_timer_state.start_ms > boot_timer_state.length_ms) {
+            check_and_boot();
         }
     }
 

@@ -23,7 +23,7 @@ all: $(LIBOPENCM3_DIR) $(BIN)
 build/bin/%.elf: $(BOARD_CONFIG_OBJ) $(COMMON_OBJS) build/canard.o
 	@echo "### BUILDING $@"
 	@mkdir -p "$(dir $@)"
-	@arm-none-eabi-gcc $(LDFLAGS) $(ARCH_FLAGS) $^ $(LDLIBS) -o $@
+	@arm-none-eabi-gcc $(CFLAGS) $(LDFLAGS) $(ARCH_FLAGS) $^ $(LDLIBS) -o $@
 	@arm-none-eabi-size $@
 
 build/bin/%.bin: build/bin/%.elf
@@ -46,7 +46,7 @@ build/canard.o: $(LIBCANARD_DIR)/canard.c
 .PHONY: $(LIBOPENCM3_DIR)
 $(LIBOPENCM3_DIR):
 	@echo "### BUILDING $@"
-	@$(MAKE) -C $(LIBOPENCM3_DIR) CFLAGS="-fshort-wchar"
+	@$(MAKE) -C $(LIBOPENCM3_DIR) CFLAGS="-fshort-wchar -flto" LDFLAGS="-flto" AR="arm-none-eabi-gcc-ar"
 
 upload: build/bin/main.elf build/bin/main.bin
 	@echo "### UPLOADING"

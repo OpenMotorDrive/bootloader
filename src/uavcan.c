@@ -377,11 +377,16 @@ static void handle_get_node_info_request(CanardInstance* ins, CanardRxTransfer* 
     // Software Version
     buffer[7] = node_info.sw_major_version;
     buffer[8] = node_info.sw_minor_version;
-    buffer[9] = 1;                          // Optional field flags, VCS commit is set
 
-    // Git hash
-    uint32_t u32 = GIT_HASH;
-    canardEncodeScalar(buffer, 80, 32, &u32);
+    if (node_info.sw_vcs_commit_available) {
+        buffer[9] |= 1; // set OPTIONAL_FIELD_FLAG_VCS_COMMIT
+        canardEncodeScalar(buffer, 80, 32, &node_info.sw_vcs_commit);
+    }
+
+    if (node_info.sw_image_crc_available) {
+        buffer[9] |= 2; // set OPTIONAL_FIELD_FLAG_IMAGE_CRC
+        canardEncodeScalar(buffer, 112, 64, &node_info.sw_image_crc);
+    }
 
     buffer[22] = node_info.hw_major_version;
     buffer[23] = node_info.hw_minor_version;
@@ -559,7 +564,11 @@ static float getRandomFloat(void)
     if (!initialized)
     {
         initialized = true;
-        srand(micros());
+        desig_get_unique_id((uint32_t*)&node_unique_id[0]);
+
+        const uint32_t* unique_32 = (uint32_t*)&node_unique_id[0];
+
+        srand(micros() ^ *unique_32);
     }
 
     return (float)rand() / (float)RAND_MAX;
