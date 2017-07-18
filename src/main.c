@@ -348,7 +348,7 @@ int main(void)
         if (can1_periph_info) {
             const struct shared_onboard_periph_pin_info_s* canbus_rx = shared_hwinfo_find_periph_pin_info(can1_periph_info, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_RX);
             const struct shared_onboard_periph_pin_info_s* canbus_tx = shared_hwinfo_find_periph_pin_info(can1_periph_info, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_TX);
-            canbus_init(canbus_rx->port, canbus_rx->pin, canbus_tx->port, canbus_tx->pin);
+            canbus_init(canbus_rx->port, canbus_rx->pin, canbus_rx->config_hint, canbus_tx->port, canbus_tx->pin, canbus_tx->config_hint, CANBUS_BAUDRATE_1M);
             uavcan_init();
         }
     }

@@ -17,16 +17,22 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include "can.h"
+#include <bootloader/shared.h>
 
-void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin) {
+void canbus_init(const struct shared_onboard_periph_info_s* can_device, enum canbus_baudrate_t bitrate) {
+    const struct shared_onboard_periph_pin_info_s* canbus_rx = shared_hwinfo_find_periph_pin_info(can_device, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_RX);
+    const struct shared_onboard_periph_pin_info_s* canbus_tx = shared_hwinfo_find_periph_pin_info(can_device, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_TX);
+
     // Enable peripheral clock
     rcc_periph_clock_enable(RCC_CAN);
-    rcc_periph_clock_enable(RCC_GPIOA+rx_port);
-    rcc_periph_clock_enable(RCC_GPIOA+tx_port);
+    rcc_periph_clock_enable(RCC_GPIOA+canbus_rx->port);
+    rcc_periph_clock_enable(RCC_GPIOA+canbus_tx->port);
 
     // Enable GPIO
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, (1<<rx_pin)|(1<<tx_pin));
-    gpio_set_af(GPIOA, GPIO_AF9, (1<<rx_pin)|(1<<tx_pin));
+    gpio_mode_setup(GPIOA+0x400*canbus_rx->port, GPIO_MODE_AF, GPIO_PUPD_NONE, 1<<canbus_rx->pin);
+    gpio_mode_setup(GPIOA+0x400*canbus_tx->port, GPIO_MODE_AF, GPIO_PUPD_NONE, 1<<canbus_tx->pin);
+    gpio_set_af(GPIOA+0x400*canbus_rx->port, canbus_rx->config_hint, 1<<canbus_rx->pin);
+    gpio_set_af(GPIOA+0x400*canbus_tx->port, canbus_tx->config_hint, 1<<canbus_tx->pin);
 
     can_reset(CAN1);
     can_init(

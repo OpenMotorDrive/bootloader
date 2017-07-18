@@ -18,6 +18,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+enum canbus_baudrate_t {
+    CANBUS_BAUDRATE_1M,
+    CANBUS_BAUDRATE_500K,
+    CANBUS_BAUDRATE_250K,
+    CANBUS_BAUDRATE_125K,
+};
+
 struct canbus_msg {
     uint32_t id;
     bool ide;
@@ -26,6 +33,6 @@ struct canbus_msg {
     uint8_t data[8];
 };
 
-void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin);
+void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin, enum canbus_baudrate_t baudrate);
 bool canbus_send_message(struct canbus_msg* msg);
 bool canbus_recv_message(struct canbus_msg* msg);

@@ -53,7 +53,8 @@ enum shared_periph_info_pin_function_t {
 };
 
 struct shared_onboard_periph_pin_info_s {
-    uint16_t function;
+    uint16_t function : 12;
+    uint16_t config_hint : 4;
     uint8_t port;
     uint8_t pin;
 } SHARED_MSG_PACKED;
@@ -89,7 +90,7 @@ union shared_msg_payload_u {
     struct shared_boot_info_msg_s boot_info_msg;
 };
 
-#define SHARED_APP_DESCRIPTOR_SIGNATURE "APDesc00"
+#define SHARED_APP_DESCRIPTOR_SIGNATURE "\xe8\x80\x41\xdf\x51\x13\xd8\x74"
 
 struct shared_app_descriptor_s {
     char signature[8];
@@ -98,6 +99,7 @@ struct shared_app_descriptor_s {
     uint32_t vcs_commit;
     uint8_t major_version;
     uint8_t minor_version;
+    uint32_t boot_delay_ms;
     uint8_t reserved[6];
 } APP_DESCRIPTOR_ALIGNED_AND_PACKED;
 
