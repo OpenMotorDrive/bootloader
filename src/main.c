@@ -324,7 +324,6 @@ static void bootloader_update(void)
             check_and_boot();
         }
     }
-
 }
 
 int main(void)

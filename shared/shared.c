@@ -86,24 +86,6 @@ const struct shared_app_descriptor_s* shared_find_app_descriptor(uint8_t* buf, u
     return 0;
 }
 
-const struct shared_onboard_periph_info_s* shared_hwinfo_find_periph_info(const struct shared_hw_info_s* hw_info, const char* periph_name) {
-    for (uint8_t i=0; i<hw_info->num_onboard_periph_descs; i++) {
-        if (!strcmp(hw_info->onboard_periph_descs[i].name, periph_name)) {
-            return &hw_info->onboard_periph_descs[i];
-        }
-    }
-    return 0;
-}
-
-const struct shared_onboard_periph_pin_info_s* shared_hwinfo_find_periph_pin_info(const struct shared_onboard_periph_info_s* periph_info, uint16_t pin_function) {
-    for (uint8_t i=0; i<periph_info->num_pin_descs; i++) {
-        if (periph_info->pin_descs[i].function == pin_function) {
-            return &periph_info->pin_descs[i];
-        }
-    }
-    return 0;
-}
-
 uint64_t shared_crc64_we(const uint8_t *buf, uint32_t len, uint64_t crc)
 {
     uint32_t i;
