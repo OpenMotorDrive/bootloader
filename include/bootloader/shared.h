@@ -22,6 +22,18 @@ struct shared_canbus_info_s {
     int32_t baudrate;
 } SHARED_MSG_PACKED;
 
+enum shared_hw_info_board_desc_fmt_t {
+    SHARED_HW_INFO_BOARD_DESC_FMT_NONE = 0
+};
+
+struct shared_hw_info_s {
+    const char* const hw_name;
+    uint8_t hw_major_version;
+    uint8_t hw_minor_version;
+    uint8_t board_desc_fmt;
+    const void* const board_desc;
+} SHARED_MSG_PACKED;
+
 struct shared_boot_msg_s {
     struct shared_canbus_info_s canbus_info;
 }  SHARED_MSG_PACKED;
@@ -30,14 +42,6 @@ struct shared_firmwareupdate_msg_s {
     struct shared_canbus_info_s canbus_info;
     uint8_t source_node_id;
     char path[201];
-} SHARED_MSG_PACKED;
-
-struct shared_hw_info_s {
-    const char* const hw_name;
-    uint8_t hw_major_version;
-    uint8_t hw_minor_version;
-    uint8_t board_desc_fmt;
-    const void* const board_desc;
 } SHARED_MSG_PACKED;
 
 struct shared_boot_info_msg_s {
