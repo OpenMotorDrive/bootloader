@@ -59,23 +59,22 @@ struct shared_onboard_periph_pin_info_s {
 } SHARED_MSG_PACKED;
 
 struct shared_onboard_periph_info_s {
-    const char* name;
+    const char* const name;
     uint8_t rev;
     uint8_t bus_addr;
     uint8_t num_pin_descs;
     const struct shared_onboard_periph_pin_info_s* pin_descs;
     uint8_t cal_data_fmt; // < 127 reserved for standard calibration data formats defined by enum shared_periph_cal_data_fmt_t
-    const void* cal_data;
+    const void* const cal_data;
 } SHARED_MSG_PACKED;
 
 struct shared_hw_info_s {
-    const char* hw_name;
+    const char* const hw_name;
     uint8_t hw_major_version;
     uint8_t hw_minor_version;
-    const char* mcu_model;
     uint8_t onboard_periph_desc_fmt;
     uint8_t num_onboard_periph_descs;
-    const struct shared_onboard_periph_info_s* onboard_periph_descs;
+    const struct shared_onboard_periph_info_s* const onboard_periph_descs;
 } SHARED_MSG_PACKED;
 
 struct shared_boot_info_msg_s {

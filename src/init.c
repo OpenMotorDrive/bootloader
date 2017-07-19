@@ -16,6 +16,7 @@
 #include "init.h"
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/flash.h>
+#include <bootloader/shared.h>
 
 void clock_init_stm32f302k8_8mhz_hse(void)
 {
@@ -46,3 +47,49 @@ void clock_init_stm32f302k8_8mhz_hse(void)
     rcc_wait_for_sysclk_status(RCC_PLL);
 }
 
+// bool init_gpio(const struct shared_onboard_periph_pin_info_s* pin_info) {
+//     uint32_t rcc_gpio_port_identifier = 0;
+//     uint32_t gpio_port_identifier = 0;
+//     switch(pin_info->port) {
+//         case 0:
+//             rcc_gpio_port_identifier = RCC_GPIOA;
+//             gpio_port_identifier = GPIOA;
+//             break;
+//         case 1:
+//             rcc_gpio_port_identifier = RCC_GPIOB;
+//             gpio_port_identifier = GPIOB;
+//             break;
+//         case 2:
+//             rcc_gpio_port_identifier = RCC_GPIOC;
+//             gpio_port_identifier = GPIOC;
+//             break;
+//         case 3:
+//             rcc_gpio_port_identifier = RCC_GPIOD;
+//             gpio_port_identifier = GPIOD;
+//             break;
+//         case 4:
+//             rcc_gpio_port_identifier = RCC_GPIOE;
+//             gpio_port_identifier = GPIOE;
+//             break;
+//         case 5:
+//             rcc_gpio_port_identifier = RCC_GPIOF;
+//             gpio_port_identifier = GPIOF;
+//             break;
+//         case 6:
+//             rcc_gpio_port_identifier = RCC_GPIOG;
+//             gpio_port_identifier = GPIOG;
+//             break;
+//         case 7:
+//             rcc_gpio_port_identifier = RCC_GPIOH;
+//             gpio_port_identifier = GPIOH;
+//             break;
+//         default:
+//             return false;
+//     }
+//
+//     rcc_periph_clock_enable(rcc_gpio_port_identifier);
+//     gpio_mode_setup(gpio_port_identifier, GPIO_MODE_AF, GPIO_PUPD_NONE, (1<<rx_pin)|(1<<tx_pin));
+//     gpio_set_af(gpio_port_identifier, GPIO_AF9, (1<<rx_pin)|(1<<tx_pin));
+//
+//     return true;
+// }
