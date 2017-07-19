@@ -4,8 +4,8 @@ import os
 import binascii
 import struct
 
-app_descriptor_fmt = "<8cQIIBB6B"
-SHARED_APP_DESCRIPTOR_SIGNATURE = "APDesc00"
+app_descriptor_fmt = "<8cQI"
+SHARED_APP_DESCRIPTOR_SIGNATURE = "\xd7\xe4\xf7\xba\xd0\x0f\x9b\xee"
 
 crc64 = crcmod.predefined.Crc('crc-64-we')
 

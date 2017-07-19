@@ -29,8 +29,6 @@
 #define APP_PAGE_SIZE 2048
 #endif
 
-#define BOOT_DELAY_STARTUP_MS 0
-
 struct app_header_s {
     uint32_t stacktop;
     uint32_t entrypoint;
@@ -76,6 +74,14 @@ static void start_boot_timer(uint32_t length_ms) {
     boot_timer_state.enable = true;
     boot_timer_state.start_ms = millis();
     boot_timer_state.length_ms = length_ms;
+}
+
+static bool check_and_start_boot_timer(void) {
+    if (app_info.shared_app_descriptor && app_info.image_crc_correct && app_info.boot_delay_sec != 0) {
+        start_boot_timer(((uint32_t)app_info.boot_delay_sec)*1000);
+        return true;
+    }
+    return false;
 }
 
 static uint32_t get_app_sec_size(void) {
@@ -232,6 +238,8 @@ static void uavcan_ready_handler(void) {
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE) {
         begin_flash_from_path(shared_msg.firmwareupdate_msg.source_node_id, shared_msg.firmwareupdate_msg.path);
     }
+
+    check_and_start_boot_timer();
 }
 
 static void file_read_response_handler(uint8_t transfer_id, int16_t error, const uint8_t* data, uint16_t data_len, bool eof)
@@ -297,9 +305,7 @@ static void bootloader_init(void)
     uavcan_set_file_read_response_cb(file_read_response_handler);
     uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
 
-#if BOOT_DELAY_STARTUP_MS != 0
-    start_boot_timer(BOOT_DELAY_STARTUP_MS);
-#endif
+    check_and_start_boot_timer();
 
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE && shared_msg.firmwareupdate_msg.canbus_info.local_node_id != 0) {
         uavcan_set_node_id(shared_msg.firmwareupdate_msg.canbus_info.local_node_id);

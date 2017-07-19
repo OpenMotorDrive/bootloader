@@ -60,7 +60,7 @@ struct shared_app_descriptor_s {
     uint32_t vcs_commit;
     uint8_t major_version;
     uint8_t minor_version;
-    uint8_t reserved[6];
+    uint8_t boot_delay_sec;
 } APP_DESCRIPTOR_ALIGNED_AND_PACKED;
 
 bool shared_msg_check_and_retreive(enum shared_msg_t* msgid, union shared_msg_payload_u* msg_payload);
