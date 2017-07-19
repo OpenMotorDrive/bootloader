@@ -29,6 +29,9 @@
 #define APP_PAGE_SIZE 2048
 #endif
 
+#define CANBUS_AUTOBAUD_SWITCH_INTERVAL_US 1000100
+#define CANBUS_AUTOBAUD_TIMEOUT_US 10000000
+
 struct app_header_s {
     uint32_t stacktop;
     uint32_t entrypoint;
@@ -38,7 +41,7 @@ struct app_header_s {
 extern uint8_t _app_sec[], _app_sec_end;
 
 // NOTE: _hw_info defined in the board config file
-extern struct shared_hw_info_s _hw_info;
+const struct shared_hw_info_s _hw_info = BOARD_CONFIG_HW_INFO_STRUCTURE;
 
 static bool restart_req = false;
 static uint32_t restart_req_us;
@@ -77,8 +80,8 @@ static void start_boot_timer(uint32_t length_ms) {
 }
 
 static bool check_and_start_boot_timer(void) {
-    if (app_info.shared_app_descriptor && app_info.image_crc_correct && app_info.boot_delay_sec != 0) {
-        start_boot_timer(((uint32_t)app_info.boot_delay_sec)*1000);
+    if (app_info.shared_app_descriptor && app_info.image_crc_correct && app_info.shared_app_descriptor->boot_delay_sec != 0) {
+        start_boot_timer(((uint32_t)app_info.shared_app_descriptor->boot_delay_sec)*1000);
         return true;
     }
     return false;
@@ -144,7 +147,14 @@ static void check_and_boot(void)
 
     union shared_msg_payload_u msg;
     msg.boot_msg.canbus_info.local_node_id = uavcan_get_node_id();
-    msg.boot_msg.canbus_info.baudrate = -1;
+
+    if (canbus_get_confirmed_baudrate()) {
+        msg.boot_msg.canbus_info.baudrate = canbus_get_confirmed_baudrate();
+    } else if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
+        msg.boot_msg.canbus_info.baudrate = shared_msg.canbus_info.baudrate;
+    } else {
+        msg.boot_msg.canbus_info.baudrate = 0;
+    }
 
     shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
 
@@ -154,9 +164,14 @@ static void check_and_boot(void)
 static void do_boot(void)
 {
     union shared_msg_payload_u msg;
-    shared_msg.boot_info_msg.canbus_info.local_node_id = uavcan_get_node_id();
-    msg.boot_msg.canbus_info.baudrate = -1;
-    shared_msg.boot_info_msg.hw_info = &_hw_info;
+
+    if (shared_msg_valid) {
+        msg.canbus_info = shared_msg.canbus_info;
+    } else {
+        memset(&shared_msg.canbus_info, 0, sizeof(shared_msg.canbus_info));
+    }
+
+    msg.boot_info_msg.hw_info = &_hw_info;
 
     shared_msg_finalize_and_write(SHARED_MSG_BOOT_INFO, &msg);
 
@@ -169,8 +184,6 @@ static void do_boot(void)
         "msr msp, %0	\n"
         "bx	%1	\n"
         : : "r"(app_header->stacktop), "r"(app_header->entrypoint) :);
-
-    for (;;) ;
 }
 
 static void write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data_len)
@@ -227,12 +240,12 @@ static void begin_flash_from_path(uint8_t source_node_id, const char* path)
     erase_app_page(0);
 }
 
-static void concat_int64_hex(char* dest, uint64_t val) {
-    char temp[10];
-    for(int8_t i=15; i>=0; i--) {
-        strcat(dest,itoa((val>>(4*i))&0xf,temp,16));
-    }
-}
+// static void concat_int64_hex(char* dest, uint64_t val) {
+//     char temp[10];
+//     for(int8_t i=15; i>=0; i--) {
+//         strcat(dest,itoa((val>>(4*i))&0xf,temp,16));
+//     }
+// }
 
 static void uavcan_ready_handler(void) {
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE) {
@@ -297,7 +310,49 @@ static void bootloader_pre_init(void)
 
 static void bootloader_init(void)
 {
+    init_clock();
+    timing_init();
+
+    check_and_start_boot_timer();
     update_app_info();
+
+    uint32_t initial_canbus_baud;
+    if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
+        initial_canbus_baud = shared_msg.canbus_info.baudrate;
+    } else if (app_info.shared_app_descriptor && canbus_baudrate_valid(app_info.shared_app_descriptor->canbus_baudrate)) {
+        initial_canbus_baud = app_info.shared_app_descriptor->canbus_baudrate;
+    } else {
+        initial_canbus_baud = 1000000;
+    }
+
+    bool canbus_autobaud_enable;
+    if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
+        canbus_autobaud_enable = false;
+    } else if (app_info.shared_app_descriptor && app_info.shared_app_descriptor->canbus_disable_auto_baud) {
+        canbus_autobaud_enable = false;
+    } else {
+        canbus_autobaud_enable = true;
+    }
+
+    uint32_t canbus_baud = initial_canbus_baud;
+    uint32_t autobaud_begin_us = micros();
+    if (canbus_autobaud_enable) {
+        struct canbus_autobaud_state_s autobaud_state;
+
+        canbus_autobaud_start(&autobaud_state, canbus_baud, CANBUS_AUTOBAUD_SWITCH_INTERVAL_US);
+
+        while (!(autobaud_state.success || micros()-autobaud_begin_us > CANBUS_AUTOBAUD_TIMEOUT_US)) {
+            canbus_baud = canbus_autobaud_update(&autobaud_state);
+        }
+
+        if (!autobaud_state.success) {
+            canbus_baud = initial_canbus_baud;
+        }
+    }
+
+    canbus_init(canbus_baud, false);
+    uavcan_init();
+
     set_uavcan_node_info();
     uavcan_set_uavcan_ready_cb(uavcan_ready_handler);
     uavcan_set_restart_cb(restart_request_handler);
@@ -305,15 +360,17 @@ static void bootloader_init(void)
     uavcan_set_file_read_response_cb(file_read_response_handler);
     uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
 
-    check_and_start_boot_timer();
-
-    if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE && shared_msg.firmwareupdate_msg.canbus_info.local_node_id != 0) {
-        uavcan_set_node_id(shared_msg.firmwareupdate_msg.canbus_info.local_node_id);
+    if (shared_msg_valid && shared_msg.canbus_info.local_node_id > 0 && shared_msg.canbus_info.local_node_id <= 127) {
+        uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
+    } else if (app_info.shared_app_descriptor && shared_msg.canbus_info.local_node_id > 0 && app_info.shared_app_descriptor->canbus_local_node_id <= 127) {
+        uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
     }
 }
 
 static void bootloader_update(void)
 {
+    uavcan_update();
+
     if (restart_req && (micros() - restart_req_us) > 1000) {
         // try to boot if image is valid
         check_and_boot();
@@ -335,35 +392,10 @@ static void bootloader_update(void)
 int main(void)
 {
     bootloader_pre_init();
-
-    // clock init
-    {
-        const struct shared_onboard_periph_info_s* hse_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "OSC_HSE");
-
-        if (hse_periph_info && hse_periph_info->cal_data_fmt == SHARED_PERIPH_CAL_DATA_FMT_FLOAT && *(float*)hse_periph_info->cal_data == 8e6f) {
-            clock_init_stm32f302k8_8mhz_hse();
-        }
-    }
-
-    timing_init();
-
-    // CANbus init
-    {
-        const struct shared_onboard_periph_info_s* can1_periph_info = shared_hwinfo_find_periph_info(&_hw_info, "CAN1");
-        if (can1_periph_info) {
-            const struct shared_onboard_periph_pin_info_s* canbus_rx = shared_hwinfo_find_periph_pin_info(can1_periph_info, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_RX);
-            const struct shared_onboard_periph_pin_info_s* canbus_tx = shared_hwinfo_find_periph_pin_info(can1_periph_info, SHARED_PERIPH_INFO_PIN_FUNCTION_CAN1_TX);
-            canbus_init(canbus_rx->port, canbus_rx->pin, canbus_tx->port, canbus_tx->pin);
-            uavcan_init();
-        }
-    }
-
-
     bootloader_init();
 
     // main loop
     while(1) {
-        uavcan_update();
         bootloader_update();
     }
 

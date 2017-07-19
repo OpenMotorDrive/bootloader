@@ -17,16 +17,42 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include "can.h"
+#include "timing.h"
 
-void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin) {
+
+static const uint32_t valid_baudrates[] = {
+    125000,
+    250000,
+    500000,
+    1000000
+};
+
+#define NUM_VALID_BAUDRATES (sizeof(valid_baudrates)/sizeof(valid_baudrates[0]))
+
+static uint32_t baudrate = 0;
+static bool successful_recv = false;
+
+void canbus_init(uint32_t baud, bool silent) {
+    if (!canbus_baudrate_valid(baud)) {
+        return;
+    }
+
+    baudrate = baud;
+    successful_recv = false;
+
     // Enable peripheral clock
     rcc_periph_clock_enable(RCC_CAN);
-    rcc_periph_clock_enable(RCC_GPIOA+rx_port);
-    rcc_periph_clock_enable(RCC_GPIOA+tx_port);
 
-    // Enable GPIO
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, (1<<rx_pin)|(1<<tx_pin));
-    gpio_set_af(GPIOA, GPIO_AF9, (1<<rx_pin)|(1<<tx_pin));
+    rcc_periph_clock_enable(BOARD_CONFIG_CAN_RX_GPIO_PORT_RCC);
+    gpio_mode_setup(BOARD_CONFIG_CAN_RX_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, BOARD_CONFIG_CAN_RX_GPIO_PIN);
+    gpio_set_af(BOARD_CONFIG_CAN_RX_GPIO_PORT, BOARD_CONFIG_CAN_RX_GPIO_ALTERNATE_FUNCTION, BOARD_CONFIG_CAN_RX_GPIO_PIN);
+
+
+    rcc_periph_clock_enable(BOARD_CONFIG_CAN_TX_GPIO_PORT_RCC);
+    gpio_mode_setup(BOARD_CONFIG_CAN_TX_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, BOARD_CONFIG_CAN_TX_GPIO_PIN);
+    gpio_set_af(BOARD_CONFIG_CAN_TX_GPIO_PORT, BOARD_CONFIG_CAN_TX_GPIO_ALTERNATE_FUNCTION, BOARD_CONFIG_CAN_TX_GPIO_PIN);
+
+    uint8_t brp = 2000000/baudrate;
 
     can_reset(CAN1);
     can_init(
@@ -40,9 +66,9 @@ void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pi
         CAN_BTR_SJW_1TQ,  /* Resynchronization time quanta jump width.*/
         CAN_BTR_TS1_15TQ, /* Time segment 1 time quanta width. */
         CAN_BTR_TS2_2TQ,  /* Time segment 2 time quanta width. */
-        2,                /* Baud rate prescaler. */
+        brp,                /* Baud rate prescaler. */
         false,            /* Loopback */
-        false             /* Silent */
+        silent             /* Silent */
     );
 
     can_filter_id_mask_32bit_init(
@@ -53,6 +79,66 @@ void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pi
         0,     /* FIFO assignment (here: FIFO0) */
         true
     );
+}
+
+uint32_t canbus_get_confirmed_baudrate(void) {
+    if (successful_recv && canbus_baudrate_valid(baudrate)) {
+        return baudrate;
+    }
+    return 0;
+}
+
+void canbus_autobaud_start(struct canbus_autobaud_state_s* state, uint32_t initial_baud, uint32_t switch_interval_us) {
+    uint32_t tnow_us = micros();
+    state->start_us = tnow_us;
+    state->last_switch_us = tnow_us;
+    state->switch_interval_us = switch_interval_us;
+
+
+    for (uint8_t i=0; i<NUM_VALID_BAUDRATES; i++) {
+        state->curr_baud_idx = i;
+        if (valid_baudrates[i] == initial_baud) {
+            break;
+        }
+    }
+    state->success = false;
+
+    canbus_init(valid_baudrates[state->curr_baud_idx], true);
+}
+
+bool canbus_baudrate_valid(uint32_t baud) {
+    for (uint8_t i=0; i<NUM_VALID_BAUDRATES; i++) {
+        if (valid_baudrates[i] == baud) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint32_t canbus_autobaud_update(struct canbus_autobaud_state_s* state) {
+    if (state->success) {
+        return valid_baudrates[state->curr_baud_idx];
+    }
+
+    uint32_t tnow_us = micros();
+    uint32_t time_since_switch_us = tnow_us - state->last_switch_us;
+
+    struct canbus_msg msg;
+    if (canbus_recv_message(&msg) && time_since_switch_us > 100) {
+        state->success = true;
+        return valid_baudrates[state->curr_baud_idx];
+    }
+
+    if (time_since_switch_us >= state->switch_interval_us) {
+        state->last_switch_us = tnow_us;
+        if (state->curr_baud_idx == 0) {
+            state->curr_baud_idx = NUM_VALID_BAUDRATES-1;
+        } else {
+            state->curr_baud_idx--;
+        }
+        canbus_init(valid_baudrates[state->curr_baud_idx], true);
+    }
+    return 0;
 }
 
 bool canbus_send_message(struct canbus_msg* msg) {
@@ -81,5 +167,8 @@ bool canbus_recv_message(struct canbus_msg* msg) {
         &fmi,
         &(msg->dlc),
         msg->data);
+
+    successful_recv = true;
+
     return true;
 }

@@ -18,6 +18,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct canbus_autobaud_state_s {
+    bool success;
+    uint32_t start_us;
+    uint32_t last_switch_us;
+    uint32_t switch_interval_us;
+    uint8_t curr_baud_idx;
+};
+
 struct canbus_msg {
     uint32_t id;
     bool ide;
@@ -26,6 +34,11 @@ struct canbus_msg {
     uint8_t data[8];
 };
 
-void canbus_init(uint8_t rx_port, uint8_t rx_pin, uint8_t tx_port, uint8_t tx_pin);
+void canbus_autobaud_start(struct canbus_autobaud_state_s* state, uint32_t initial_baud, uint32_t switch_interval_us);
+uint32_t canbus_autobaud_update(struct canbus_autobaud_state_s* state);
+
+bool canbus_baudrate_valid(uint32_t baud);
+uint32_t canbus_get_confirmed_baudrate(void);
+void canbus_init(uint32_t baud, bool silent);
 bool canbus_send_message(struct canbus_msg* msg);
 bool canbus_recv_message(struct canbus_msg* msg);

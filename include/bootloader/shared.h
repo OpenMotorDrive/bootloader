@@ -18,8 +18,8 @@ enum shared_msg_t {
 };
 
 struct shared_canbus_info_s {
+    uint32_t baudrate;
     uint8_t local_node_id;
-    int32_t baudrate;
 } SHARED_MSG_PACKED;
 
 enum shared_hw_info_board_desc_fmt_t {
@@ -53,6 +53,7 @@ union shared_msg_payload_u {
     struct shared_boot_msg_s boot_msg;
     struct shared_firmwareupdate_msg_s firmwareupdate_msg;
     struct shared_boot_info_msg_s boot_info_msg;
+    struct shared_canbus_info_s canbus_info;
 };
 
 #define SHARED_APP_DESCRIPTOR_SIGNATURE "\xd7\xe4\xf7\xba\xd0\x0f\x9b\xee"
@@ -65,6 +66,9 @@ struct shared_app_descriptor_s {
     uint8_t major_version;
     uint8_t minor_version;
     uint8_t boot_delay_sec;
+    uint32_t canbus_disable_auto_baud : 1;
+    uint32_t canbus_baudrate : 31;
+    uint8_t canbus_local_node_id;
 } APP_DESCRIPTOR_ALIGNED_AND_PACKED;
 
 bool shared_msg_check_and_retreive(enum shared_msg_t* msgid, union shared_msg_payload_u* msg_payload);

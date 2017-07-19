@@ -15,4 +15,5 @@
 
 #pragma once
 
-void clock_init_stm32f302k8_8mhz_hse(void);
+void init_clock(void);
+void init_gpio_can(void);
