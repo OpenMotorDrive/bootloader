@@ -26,6 +26,8 @@ static int16_t get_payload_length(enum shared_msg_t msgid) {
             return sizeof(struct shared_firmwareupdate_msg_s);
         case SHARED_MSG_BOOT_INFO:
             return sizeof(struct shared_boot_info_msg_s);
+        case SHARED_MSG_CANBUS_INFO:
+            return sizeof(struct shared_canbus_info_s);
     };
 
     return -1;
@@ -73,17 +75,19 @@ void shared_msg_clear(void) {
     memset(&_app_bl_shared_sec, 0, sizeof(_app_bl_shared_sec));
 }
 
-const struct shared_app_descriptor_s* shared_find_app_descriptor(uint8_t* buf, uint32_t buf_len)
+const void* shared_find_marker(uint64_t marker, uint8_t* buf, uint32_t buf_len)
 {
-    for (uint32_t i=0; i<buf_len-sizeof(struct shared_app_descriptor_s); i+=8) {
-        struct shared_app_descriptor_s* app_descriptor = (struct shared_app_descriptor_s*)&buf[i];
-
-        if (!memcmp(&app_descriptor->signature, SHARED_APP_DESCRIPTOR_SIGNATURE, sizeof(app_descriptor->signature))) {
-            return app_descriptor;
+    for (uint32_t i=0; i<buf_len-sizeof(marker); i++) {
+        if (!memcmp(&buf[i], &marker, sizeof(marker))) {
+            return &buf[i];
         }
     }
-
     return 0;
+}
+
+const struct shared_app_descriptor_s* shared_find_app_descriptor(uint8_t* buf, uint32_t buf_len)
+{
+    return shared_find_marker(*((uint64_t*)SHARED_APP_DESCRIPTOR_SIGNATURE), buf, buf_len);
 }
 
 uint64_t shared_crc64_we(const uint8_t *buf, uint32_t len, uint64_t crc)

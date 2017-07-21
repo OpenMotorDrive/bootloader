@@ -53,7 +53,7 @@ static struct {
     uint8_t retries;
     uint32_t last_req_ms;
     uint8_t source_node_id;
-    uint32_t last_erased_page;
+    int32_t last_erased_page;
     char path[201];
 } flash_state;
 
@@ -73,6 +73,16 @@ static struct {
     bool image_crc_correct;
 } app_info;
 
+static void write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data_len)
+{
+    for (uint16_t i=0; i<data_len; i+=sizeof(uint16_t)) {
+        uint16_t* src_ptr = (uint16_t*)&data[i];
+        uint16_t* dest_ptr = (uint16_t*)&_app_sec[i+ofs];
+
+        flash_program_half_word(dest_ptr, src_ptr);
+    }
+}
+
 static void start_boot_timer(uint32_t length_ms) {
     boot_timer_state.enable = true;
     boot_timer_state.start_ms = millis();
@@ -91,7 +101,7 @@ static uint32_t get_app_sec_size(void) {
     return (uint32_t)&_app_sec_end - (uint32_t)&_app_sec[0];
 }
 
-static void set_uavcan_node_info(void)
+static void update_uavcan_node_info_and_status(void)
 {
     struct uavcan_node_info_s uavcan_node_info;
     memset(&uavcan_node_info, 0, sizeof(uavcan_node_info));
@@ -99,7 +109,7 @@ static void set_uavcan_node_info(void)
     uavcan_node_info.hw_major_version = _hw_info.hw_major_version;
     uavcan_node_info.hw_minor_version = _hw_info.hw_minor_version;
 
-    if (app_info.shared_app_descriptor) {
+    if (app_info.shared_app_descriptor && app_info.image_crc_correct) {
         uavcan_node_info.sw_major_version = app_info.shared_app_descriptor->major_version;
         uavcan_node_info.sw_minor_version = app_info.shared_app_descriptor->minor_version;
         uavcan_node_info.sw_vcs_commit_available = true;
@@ -109,16 +119,20 @@ static void set_uavcan_node_info(void)
     }
 
     uavcan_set_node_info(uavcan_node_info);
+
+    if (flash_state.in_progress) {
+        uavcan_set_node_mode(UAVCAN_MODE_SOFTWARE_UPDATE);
+        uavcan_set_node_health(UAVCAN_HEALTH_OK);
+    } else {
+        uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
+        uavcan_set_node_health(app_info.image_crc_correct ? UAVCAN_HEALTH_OK : UAVCAN_HEALTH_CRITICAL);
+    }
 }
 
+// call on change to flash memory
 static void update_app_info(void)
 {
     memset(&app_info, 0, sizeof(app_info));
-
-    struct app_header_s* app_header = (struct app_header_s*)_app_sec;
-    if (app_header->entrypoint == 0xffffffff) {
-        return;
-    }
 
     app_info.shared_app_descriptor = shared_find_app_descriptor(_app_sec, get_app_sec_size());
 
@@ -137,6 +151,16 @@ static void update_app_info(void)
 
         app_info.image_crc_correct = (app_info.image_crc_computed == descriptor->image_crc);
     }
+}
+
+static void corrupt_app(void) {
+    for (uint8_t i=0; i<4; i++) {
+        uint16_t src = 0;
+        uint16_t* dest_ptr = (uint16_t*)&_app_sec[i*2];
+        flash_program_half_word(dest_ptr, &src);
+    }
+
+    update_app_info();
 }
 
 static void check_and_boot(void)
@@ -186,16 +210,6 @@ static void do_boot(void)
         : : "r"(app_header->stacktop), "r"(app_header->entrypoint) :);
 }
 
-static void write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data_len)
-{
-    for (uint16_t i=0; i<data_len; i+=sizeof(uint16_t)) {
-        uint16_t* src_ptr = (uint16_t*)&data[i];
-        uint16_t* dest_ptr = (uint16_t*)&_app_sec[i+ofs];
-
-        flash_program_half_word(dest_ptr, src_ptr);
-    }
-}
-
 static void erase_app_page(uint32_t page_num) {
     flash_erase_page(&_app_sec[page_num*APP_PAGE_SIZE]);
     flash_state.last_erased_page = page_num;
@@ -220,14 +234,12 @@ static void do_send_read_request(void) {
 }
 
 static void do_fail_update(void) {
-    uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
     memset(&flash_state, 0, sizeof(flash_state));
-    erase_app_page(0);
+    corrupt_app();
 }
 
 static void begin_flash_from_path(uint8_t source_node_id, const char* path)
 {
-    uavcan_set_node_mode(UAVCAN_MODE_SOFTWARE_UPDATE);
     boot_timer_state.enable = false;
     memset(&flash_state, 0, sizeof(flash_state));
     flash_state.in_progress = true;
@@ -236,8 +248,8 @@ static void begin_flash_from_path(uint8_t source_node_id, const char* path)
     strncpy(flash_state.path, path, 200);
     flash_state.transfer_id = uavcan_send_file_read_request(flash_state.source_node_id, flash_state.ofs, flash_state.path);
     flash_state.last_req_ms = millis();
-
-    erase_app_page(0);
+    corrupt_app();
+    flash_state.last_erased_page = -1;
 }
 
 // static void concat_int64_hex(char* dest, uint64_t val) {
@@ -255,6 +267,12 @@ static void uavcan_ready_handler(void) {
     check_and_start_boot_timer();
 }
 
+static void on_update_complete(void) {
+    flash_state.in_progress = false;
+    update_app_info();
+    check_and_boot();
+}
+
 static void file_read_response_handler(uint8_t transfer_id, int16_t error, const uint8_t* data, uint16_t data_len, bool eof)
 {
     if (flash_state.in_progress && transfer_id == flash_state.transfer_id) {
@@ -263,19 +281,17 @@ static void file_read_response_handler(uint8_t transfer_id, int16_t error, const
             return;
         }
 
-        uint32_t curr_page = (flash_state.ofs+data_len)/APP_PAGE_SIZE;
+        int32_t curr_page = (flash_state.ofs+data_len)/APP_PAGE_SIZE;
         if (curr_page > flash_state.last_erased_page) {
-            erase_app_page(curr_page);
+            for (int32_t i=flash_state.last_erased_page+1; i<=curr_page; i++) {
+                erase_app_page(i);
+            }
         }
 
         write_data_to_flash(flash_state.ofs, data, data_len);
 
         if (eof) {
-            uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
-            flash_state.in_progress = false;
-            update_app_info();
-            set_uavcan_node_info();
-            check_and_boot();
+            on_update_complete();
         } else {
             flash_state.ofs += data_len;
             do_send_read_request();
@@ -353,12 +369,11 @@ static void bootloader_init(void)
     canbus_init(canbus_baud, false);
     uavcan_init();
 
-    set_uavcan_node_info();
     uavcan_set_uavcan_ready_cb(uavcan_ready_handler);
     uavcan_set_restart_cb(restart_request_handler);
     uavcan_set_file_beginfirmwareupdate_cb(file_beginfirmwareupdate_handler);
     uavcan_set_file_read_response_cb(file_read_response_handler);
-    uavcan_set_node_mode(UAVCAN_MODE_MAINTENANCE);
+    update_uavcan_node_info_and_status();
 
     if (shared_msg_valid && shared_msg.canbus_info.local_node_id > 0 && shared_msg.canbus_info.local_node_id <= 127) {
         uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
@@ -369,6 +384,7 @@ static void bootloader_init(void)
 
 static void bootloader_update(void)
 {
+    update_uavcan_node_info_and_status();
     uavcan_update();
 
     if (restart_req && (micros() - restart_req_us) > 1000) {
@@ -381,6 +397,9 @@ static void bootloader_update(void)
     if (flash_state.in_progress) {
         if (millis()-flash_state.last_req_ms > 500) {
             do_resend_read_request();
+            if (flash_state.retries > 10) { // retry for 5 seconds
+                do_fail_update();
+            }
         }
     } else {
         if (boot_timer_state.enable && millis()-boot_timer_state.start_ms > boot_timer_state.length_ms) {

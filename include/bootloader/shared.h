@@ -3,18 +3,18 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// TODO: split this file up
+// message sharing section
+
 #ifndef SHARED_MSG_PACKED
 #define SHARED_MSG_PACKED __attribute__((packed))
-#endif
-
-#ifndef APP_DESCRIPTOR_ALIGNED_AND_PACKED
-#define APP_DESCRIPTOR_ALIGNED_AND_PACKED __attribute__((aligned(8),packed))
 #endif
 
 enum shared_msg_t {
     SHARED_MSG_BOOT = 0,
     SHARED_MSG_FIRMWAREUPDATE = 1,
-    SHARED_MSG_BOOT_INFO = 2
+    SHARED_MSG_BOOT_INFO = 2,
+    SHARED_MSG_CANBUS_INFO = 3
 };
 
 struct shared_canbus_info_s {
@@ -56,6 +56,17 @@ union shared_msg_payload_u {
     struct shared_canbus_info_s canbus_info;
 };
 
+bool shared_msg_check_and_retreive(enum shared_msg_t* msgid, union shared_msg_payload_u* msg_payload);
+void shared_msg_finalize_and_write(enum shared_msg_t msgid, const union shared_msg_payload_u* msg_payload);
+void shared_msg_clear(void);
+
+
+// app descriptor section
+
+#ifndef APP_DESCRIPTOR_ALIGNED_AND_PACKED
+#define APP_DESCRIPTOR_ALIGNED_AND_PACKED __attribute__((aligned(8),packed))
+#endif
+
 #define SHARED_APP_DESCRIPTOR_SIGNATURE "\xd7\xe4\xf7\xba\xd0\x0f\x9b\xee"
 
 struct shared_app_descriptor_s {
@@ -71,10 +82,9 @@ struct shared_app_descriptor_s {
     uint8_t canbus_local_node_id;
 } APP_DESCRIPTOR_ALIGNED_AND_PACKED;
 
-bool shared_msg_check_and_retreive(enum shared_msg_t* msgid, union shared_msg_payload_u* msg_payload);
-void shared_msg_finalize_and_write(enum shared_msg_t msgid, const union shared_msg_payload_u* msg_payload);
-void shared_msg_clear(void);
-
+const void* shared_find_marker(uint64_t marker, uint8_t* buf, uint32_t buf_len);
 const struct shared_app_descriptor_s* shared_find_app_descriptor(uint8_t* buf, uint32_t buf_len);
+
+// crc section
 
 uint64_t shared_crc64_we(const uint8_t *buf, uint32_t len, uint64_t crc);
