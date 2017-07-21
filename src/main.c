@@ -377,8 +377,8 @@ static void bootloader_init(void)
 
     if (shared_msg_valid && shared_msg.canbus_info.local_node_id > 0 && shared_msg.canbus_info.local_node_id <= 127) {
         uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
-    } else if (app_info.shared_app_descriptor && shared_msg.canbus_info.local_node_id > 0 && app_info.shared_app_descriptor->canbus_local_node_id <= 127) {
-        uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
+    } else if (app_info.shared_app_descriptor && app_info.shared_app_descriptor->canbus_local_node_id > 0 && app_info.shared_app_descriptor->canbus_local_node_id <= 127) {
+        uavcan_set_node_id(app_info.shared_app_descriptor->canbus_local_node_id);
     }
 }
 
