@@ -138,7 +138,8 @@ static void update_app_info(void)
 
     const struct shared_app_descriptor_s* descriptor = app_info.shared_app_descriptor;
 
-    if (descriptor && descriptor->image_size <= get_app_sec_size()) {
+
+    if (descriptor && descriptor->image_size >= sizeof(struct shared_app_descriptor_s) && descriptor->image_size <= get_app_sec_size()) {
         uint32_t pre_crc_len = ((uint32_t)&descriptor->image_crc) - ((uint32_t)_app_sec);
         uint32_t post_crc_len = descriptor->image_size - pre_crc_len - sizeof(uint64_t);
         uint8_t* pre_crc_origin = _app_sec;
