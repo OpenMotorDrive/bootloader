@@ -382,6 +382,24 @@ static void on_canbus_baudrate_confirmed(uint32_t canbus_baud) {
     }
 }
 
+#ifdef BOARD_CONFIG_I2C_BOOT_TRIGGER
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/rcc.h>
+
+static void i2c_boot_check(void) {
+    rcc_periph_clock_enable(RCC_GPIOA);
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLDOWN, GPIO9|GPIO10);
+
+    for (uint8_t i=0; i<30; i++) {
+        if (!gpio_get(GPIOA,GPIO9|GPIO10)) {
+            return;
+        }
+    }
+
+    command_boot_if_app_valid(127);
+}
+#endif
+
 static void bootloader_pre_init(void)
 {
     // check for a valid shared message, jump immediately if it is a boot command
@@ -410,6 +428,11 @@ static void bootloader_update(void)
     if (canbus_initialized) {
         uavcan_update();
     }
+
+#ifdef BOARD_CONFIG_I2C_BOOT_TRIGGER
+    #warning building with i2c_boot_check
+    i2c_boot_check();
+#endif
 
     if (restart_req && (micros() - restart_req_us) > 1000) {
         // try to boot if image is valid
