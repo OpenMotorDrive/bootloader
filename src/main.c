@@ -319,6 +319,67 @@ static void file_beginfirmwareupdate_handler(struct uavcan_transfer_info_s trans
     }
 }
 
+static bool canbus_autobaud_running;
+static struct canbus_autobaud_state_s autobaud_state;
+static void on_canbus_baudrate_confirmed(uint32_t canbus_baud);
+
+static void begin_canbus_autobaud(void) {
+    uint32_t canbus_baud;
+    if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
+        canbus_baud = shared_msg.canbus_info.baudrate;
+    } else if (app_info.shared_app_parameters && canbus_baudrate_valid(app_info.shared_app_parameters->canbus_baudrate)) {
+        canbus_baud = app_info.shared_app_parameters->canbus_baudrate;
+    } else {
+        canbus_baud = 1000000;
+    }
+
+    bool canbus_autobaud_enable;
+    if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
+        canbus_autobaud_enable = false;
+    } else if (app_info.shared_app_parameters && app_info.shared_app_parameters->canbus_disable_auto_baud) {
+        canbus_autobaud_enable = false;
+    } else {
+        canbus_autobaud_enable = true;
+    }
+
+    if (canbus_autobaud_enable) {
+        canbus_autobaud_start(&autobaud_state, canbus_baud, CANBUS_AUTOBAUD_SWITCH_INTERVAL_US);
+        canbus_autobaud_running = true;
+    } else {
+        on_canbus_baudrate_confirmed(canbus_baud);
+    }
+}
+
+static void update_canbus_autobaud(void) {
+    if (!canbus_autobaud_running) {
+        return;
+    }
+
+    uint32_t canbus_baud = canbus_autobaud_update(&autobaud_state);
+    if (autobaud_state.success) {
+        on_canbus_baudrate_confirmed(canbus_baud);
+        canbus_autobaud_running = false;
+    }
+
+}
+
+static void on_canbus_baudrate_confirmed(uint32_t canbus_baud) {
+    canbus_init(canbus_baud, false);
+    uavcan_init();
+
+    uavcan_set_uavcan_ready_cb(uavcan_ready_handler);
+    uavcan_set_restart_cb(restart_request_handler);
+    uavcan_set_file_beginfirmwareupdate_cb(file_beginfirmwareupdate_handler);
+    uavcan_set_file_read_response_cb(file_read_response_handler);
+    update_uavcan_node_info_and_status();
+
+    if (shared_msg_valid && shared_msg.canbus_info.local_node_id > 0 && shared_msg.canbus_info.local_node_id <= 127) {
+        uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
+    } else if (app_info.shared_app_parameters && app_info.shared_app_parameters->canbus_local_node_id > 0 && app_info.shared_app_parameters->canbus_local_node_id <= 127) {
+        uavcan_set_node_id(app_info.shared_app_parameters->canbus_local_node_id);
+    }
+}
+
 static void bootloader_pre_init(void)
 {
     // check for a valid shared message, jump immediately if it is a boot command
@@ -336,58 +397,13 @@ static void bootloader_init(void)
     check_and_start_boot_timer();
     update_app_info();
 
-    uint32_t initial_canbus_baud;
-    if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
-        initial_canbus_baud = shared_msg.canbus_info.baudrate;
-    } else if (app_info.shared_app_parameters && canbus_baudrate_valid(app_info.shared_app_parameters->canbus_baudrate)) {
-        initial_canbus_baud = app_info.shared_app_parameters->canbus_baudrate;
-    } else {
-        initial_canbus_baud = 1000000;
-    }
+    begin_canbus_autobaud();
 
-    bool canbus_autobaud_enable;
-    if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
-        canbus_autobaud_enable = false;
-    } else if (app_info.shared_app_parameters && app_info.shared_app_parameters->canbus_disable_auto_baud) {
-        canbus_autobaud_enable = false;
-    } else {
-        canbus_autobaud_enable = true;
-    }
-
-    uint32_t canbus_baud = initial_canbus_baud;
-    uint32_t autobaud_begin_us = micros();
-    if (canbus_autobaud_enable) {
-        struct canbus_autobaud_state_s autobaud_state;
-
-        canbus_autobaud_start(&autobaud_state, canbus_baud, CANBUS_AUTOBAUD_SWITCH_INTERVAL_US);
-
-        while (!(autobaud_state.success || micros()-autobaud_begin_us > CANBUS_AUTOBAUD_TIMEOUT_US)) {
-            canbus_baud = canbus_autobaud_update(&autobaud_state);
-        }
-
-        if (!autobaud_state.success) {
-            canbus_baud = initial_canbus_baud;
-        }
-    }
-
-    canbus_init(canbus_baud, false);
-    uavcan_init();
-
-    uavcan_set_uavcan_ready_cb(uavcan_ready_handler);
-    uavcan_set_restart_cb(restart_request_handler);
-    uavcan_set_file_beginfirmwareupdate_cb(file_beginfirmwareupdate_handler);
-    uavcan_set_file_read_response_cb(file_read_response_handler);
-    update_uavcan_node_info_and_status();
-
-    if (shared_msg_valid && shared_msg.canbus_info.local_node_id > 0 && shared_msg.canbus_info.local_node_id <= 127) {
-        uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
-    } else if (app_info.shared_app_parameters && app_info.shared_app_parameters->canbus_local_node_id > 0 && app_info.shared_app_parameters->canbus_local_node_id <= 127) {
-        uavcan_set_node_id(app_info.shared_app_parameters->canbus_local_node_id);
-    }
 }
 
 static void bootloader_update(void)
 {
+    update_canbus_autobaud();
     update_uavcan_node_info_and_status();
     uavcan_update();
 
