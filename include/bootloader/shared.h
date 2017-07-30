@@ -26,6 +26,13 @@ enum shared_hw_info_board_desc_fmt_t {
     SHARED_HW_INFO_BOARD_DESC_FMT_NONE = 0
 };
 
+enum shared_boot_reason_t {
+    SHARED_BOOT_REASON_TIMEOUT = 0,
+    SHARED_BOOT_REASON_REBOOT_COMMAND = 1,
+    SHARED_BOOT_REASON_APPLICATION_COMMAND = 2,
+    SHARED_BOOT_REASON_FIRMWARE_UPDATE = 3,
+};
+
 struct shared_hw_info_s {
     const char* const hw_name;
     uint8_t hw_major_version;
@@ -36,6 +43,7 @@ struct shared_hw_info_s {
 
 struct shared_boot_msg_s {
     struct shared_canbus_info_s canbus_info;
+    uint8_t boot_reason; // >= 127 are vendor/application-specific codes
 }  SHARED_MSG_PACKED;
 
 struct shared_firmwareupdate_msg_s {
@@ -47,6 +55,7 @@ struct shared_firmwareupdate_msg_s {
 struct shared_boot_info_msg_s {
     struct shared_canbus_info_s canbus_info;
     const struct shared_hw_info_s* hw_info;
+    uint8_t boot_reason; // >= 127 are vendor/application-specific codes
 } SHARED_MSG_PACKED;
 
 union shared_msg_payload_u {

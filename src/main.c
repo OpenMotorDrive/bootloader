@@ -169,7 +169,7 @@ static void corrupt_app(void) {
     update_app_info();
 }
 
-static void check_and_boot(void)
+static void command_boot_if_app_valid(uint8_t boot_reason)
 {
     if (!app_info.image_crc_correct) {
         return;
@@ -177,6 +177,7 @@ static void check_and_boot(void)
 
     union shared_msg_payload_u msg;
     msg.boot_msg.canbus_info.local_node_id = uavcan_get_node_id();
+    msg.boot_msg.boot_reason = boot_reason;
 
     if (canbus_get_confirmed_baudrate()) {
         msg.boot_msg.canbus_info.baudrate = canbus_get_confirmed_baudrate();
@@ -191,16 +192,15 @@ static void check_and_boot(void)
     scb_reset_system();
 }
 
-static void do_boot(void)
+static void boot_app_if_commanded(void)
 {
-    union shared_msg_payload_u msg;
-
-    if (shared_msg_valid) {
-        msg.canbus_info = shared_msg.canbus_info;
-    } else {
-        memset(&shared_msg.canbus_info, 0, sizeof(shared_msg.canbus_info));
+    if (!shared_msg_valid || shared_msgid != SHARED_MSG_BOOT) {
+        return;
     }
 
+    union shared_msg_payload_u msg;
+    msg.canbus_info = shared_msg.canbus_info;
+    msg.boot_info_msg.boot_reason = shared_msg.boot_msg.boot_reason;
     msg.boot_info_msg.hw_info = &_hw_info;
 
     shared_msg_finalize_and_write(SHARED_MSG_BOOT_INFO, &msg);
@@ -276,7 +276,7 @@ static void uavcan_ready_handler(void) {
 static void on_update_complete(void) {
     flash_state.in_progress = false;
     update_app_info();
-    check_and_boot();
+    command_boot_if_app_valid(SHARED_BOOT_REASON_FIRMWARE_UPDATE);
 }
 
 static void file_read_response_handler(uint8_t transfer_id, int16_t error, const uint8_t* data, uint16_t data_len, bool eof)
@@ -325,9 +325,7 @@ static void bootloader_pre_init(void)
     shared_msg_valid = shared_msg_check_and_retreive(&shared_msgid, &shared_msg);
     shared_msg_clear();
 
-    if (shared_msg_valid && shared_msgid == SHARED_MSG_BOOT) {
-        do_boot();
-    }
+    boot_app_if_commanded();
 }
 
 static void bootloader_init(void)
@@ -395,7 +393,7 @@ static void bootloader_update(void)
 
     if (restart_req && (micros() - restart_req_us) > 1000) {
         // try to boot if image is valid
-        check_and_boot();
+        command_boot_if_app_valid(SHARED_BOOT_REASON_REBOOT_COMMAND);
         // otherwise, just reset
         scb_reset_system();
     }
@@ -409,7 +407,7 @@ static void bootloader_update(void)
         }
     } else {
         if (boot_timer_state.enable && millis()-boot_timer_state.start_ms > boot_timer_state.length_ms) {
-            check_and_boot();
+            command_boot_if_app_valid(SHARED_BOOT_REASON_TIMEOUT);
         }
     }
 }
