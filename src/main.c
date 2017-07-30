@@ -320,6 +320,7 @@ static void file_beginfirmwareupdate_handler(struct uavcan_transfer_info_s trans
 }
 
 static bool canbus_autobaud_running;
+static bool canbus_initialized;
 static struct canbus_autobaud_state_s autobaud_state;
 static void on_canbus_baudrate_confirmed(uint32_t canbus_baud);
 
@@ -365,6 +366,7 @@ static void update_canbus_autobaud(void) {
 
 static void on_canbus_baudrate_confirmed(uint32_t canbus_baud) {
     canbus_init(canbus_baud, false);
+    canbus_initialized = true;
     uavcan_init();
 
     uavcan_set_uavcan_ready_cb(uavcan_ready_handler);
@@ -405,7 +407,9 @@ static void bootloader_update(void)
 {
     update_canbus_autobaud();
     update_uavcan_node_info_and_status();
-    uavcan_update();
+    if (canbus_initialized) {
+        uavcan_update();
+    }
 
     if (restart_req && (micros() - restart_req_us) > 1000) {
         // try to boot if image is valid
