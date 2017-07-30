@@ -71,6 +71,7 @@ static struct {
     const struct shared_app_descriptor_s* shared_app_descriptor;
     uint64_t image_crc_computed;
     bool image_crc_correct;
+    const struct shared_app_parameters_s* shared_app_parameters;
 } app_info;
 
 static void write_data_to_flash(uint32_t ofs, const uint8_t* data, uint32_t data_len)
@@ -90,8 +91,8 @@ static void start_boot_timer(uint32_t length_ms) {
 }
 
 static bool check_and_start_boot_timer(void) {
-    if (app_info.shared_app_descriptor && app_info.image_crc_correct && app_info.shared_app_descriptor->boot_delay_sec != 0) {
-        start_boot_timer(((uint32_t)app_info.shared_app_descriptor->boot_delay_sec)*1000);
+    if (app_info.shared_app_parameters && app_info.shared_app_parameters->boot_delay_sec != 0) {
+        start_boot_timer(((uint32_t)app_info.shared_app_parameters->boot_delay_sec)*1000);
         return true;
     }
     return false;
@@ -151,6 +152,10 @@ static void update_app_info(void)
         app_info.image_crc_computed = shared_crc64_we(post_crc_origin, post_crc_len, app_info.image_crc_computed);
 
         app_info.image_crc_correct = (app_info.image_crc_computed == descriptor->image_crc);
+    }
+
+    if (app_info.image_crc_correct) {
+        app_info.shared_app_parameters = shared_get_parameters(descriptor);
     }
 }
 
@@ -336,8 +341,8 @@ static void bootloader_init(void)
     uint32_t initial_canbus_baud;
     if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
         initial_canbus_baud = shared_msg.canbus_info.baudrate;
-    } else if (app_info.shared_app_descriptor && canbus_baudrate_valid(app_info.shared_app_descriptor->canbus_baudrate)) {
-        initial_canbus_baud = app_info.shared_app_descriptor->canbus_baudrate;
+    } else if (app_info.shared_app_parameters && canbus_baudrate_valid(app_info.shared_app_parameters->canbus_baudrate)) {
+        initial_canbus_baud = app_info.shared_app_parameters->canbus_baudrate;
     } else {
         initial_canbus_baud = 1000000;
     }
@@ -345,7 +350,7 @@ static void bootloader_init(void)
     bool canbus_autobaud_enable;
     if (shared_msg_valid && canbus_baudrate_valid(shared_msg.canbus_info.baudrate)) {
         canbus_autobaud_enable = false;
-    } else if (app_info.shared_app_descriptor && app_info.shared_app_descriptor->canbus_disable_auto_baud) {
+    } else if (app_info.shared_app_parameters && app_info.shared_app_parameters->canbus_disable_auto_baud) {
         canbus_autobaud_enable = false;
     } else {
         canbus_autobaud_enable = true;
@@ -378,8 +383,8 @@ static void bootloader_init(void)
 
     if (shared_msg_valid && shared_msg.canbus_info.local_node_id > 0 && shared_msg.canbus_info.local_node_id <= 127) {
         uavcan_set_node_id(shared_msg.canbus_info.local_node_id);
-    } else if (app_info.shared_app_descriptor && app_info.shared_app_descriptor->canbus_local_node_id > 0 && app_info.shared_app_descriptor->canbus_local_node_id <= 127) {
-        uavcan_set_node_id(app_info.shared_app_descriptor->canbus_local_node_id);
+    } else if (app_info.shared_app_parameters && app_info.shared_app_parameters->canbus_local_node_id > 0 && app_info.shared_app_parameters->canbus_local_node_id <= 127) {
+        uavcan_set_node_id(app_info.shared_app_parameters->canbus_local_node_id);
     }
 }
 

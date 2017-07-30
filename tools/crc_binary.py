@@ -5,7 +5,7 @@ import binascii
 import struct
 
 app_descriptor_fmt = "<8cQI"
-SHARED_APP_DESCRIPTOR_SIGNATURE = "\xd7\xe4\xf7\xba\xd0\x0f\x9b\xee"
+SHARED_APP_DESCRIPTOR_SIGNATURES = ["\xd7\xe4\xf7\xba\xd0\x0f\x9b\xee", "\x40\xa2\xe4\xf1\x64\x68\x91\x06"]
 
 crc64 = crcmod.predefined.Crc('crc-64-we')
 
@@ -15,7 +15,7 @@ with open(sys.argv[1], 'rb') as f:
 app_descriptor_idx = None
 app_descriptor_len = struct.calcsize(app_descriptor_fmt)
 for i in range(0, len(data), 8):
-    if data[i:i+8] == SHARED_APP_DESCRIPTOR_SIGNATURE:
+    if data[i:i+8] in SHARED_APP_DESCRIPTOR_SIGNATURES:
         app_descriptor_idx = i
         break
 
