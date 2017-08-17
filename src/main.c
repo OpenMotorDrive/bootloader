@@ -15,14 +15,16 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "timing.h"
-#include "init.h"
-#include "can.h"
-#include "uavcan.h"
-#include "flash.h"
+#include <common/timing.h>
+#include <common/init.h>
+#include <common/can.h>
+#include <common/uavcan.h>
+#include <common/flash.h>
 #include <libopencm3/cm3/scb.h>
 #include <string.h>
-#include <bootloader/shared.h>
+#include <common/shared_app_descriptor.h>
+#include <common/shared_boot_msg.h>
+#include <common/crc64_we.h>
 #include <stdlib.h>
 
 #ifdef STM32F3
@@ -147,9 +149,9 @@ static void update_app_info(void)
         uint8_t* post_crc_origin = (uint8_t*)((&descriptor->image_crc)+1);
         uint64_t zero64 = 0;
 
-        app_info.image_crc_computed = shared_crc64_we(pre_crc_origin, pre_crc_len, 0);
-        app_info.image_crc_computed = shared_crc64_we((uint8_t*)&zero64, sizeof(zero64), app_info.image_crc_computed);
-        app_info.image_crc_computed = shared_crc64_we(post_crc_origin, post_crc_len, app_info.image_crc_computed);
+        app_info.image_crc_computed = crc64_we(pre_crc_origin, pre_crc_len, 0);
+        app_info.image_crc_computed = crc64_we((uint8_t*)&zero64, sizeof(zero64), app_info.image_crc_computed);
+        app_info.image_crc_computed = crc64_we(post_crc_origin, post_crc_len, app_info.image_crc_computed);
 
         app_info.image_crc_correct = (app_info.image_crc_computed == descriptor->image_crc);
     }
@@ -221,11 +223,21 @@ static void erase_app_page(uint32_t page_num) {
     flash_state.last_erased_page = page_num;
 }
 
-static bool restart_request_handler(void)
-{
-    restart_req = true;
-    restart_req_us = micros();
-    return true;
+static void restart_request_handler(struct uavcan_transfer_info_s transfer_info, uint64_t magic) {
+    if (magic == 0xACCE551B1E) {
+        uavcan_send_restart_response(&transfer_info, true);
+        uint32_t tbegin_us = micros();
+        while (micros()-tbegin_us < 1000) {
+            uavcan_update();
+        }
+
+        // try to boot if image is valid
+        command_boot_if_app_valid(SHARED_BOOT_REASON_REBOOT_COMMAND);
+        // otherwise, just reset
+        scb_reset_system();
+    } else {
+        uavcan_send_restart_response(&transfer_info, false);
+    }
 }
 
 static void do_resend_read_request(void) {
