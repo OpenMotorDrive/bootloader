@@ -1,5 +1,6 @@
-LIBOPENCM3_DIR := omd_common/libopencm3
-LIBCANARD_DIR := omd_common/libcanard
+LIBOPENCM3_DIR := modules/libopencm3
+LIBCANARD_DIR := modules/libcanard
+COMMON_DIR := modules/omd_common
 
 ARCH_FLAGS := -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16
 
@@ -18,7 +19,7 @@ else
 endif
 
 COMMON_OBJS := $(addprefix build/,$(addsuffix .o,$(basename $(shell find src -name "*.c"))))
-COMMON_OBJS += $(addprefix build/,$(addsuffix .o,$(basename $(shell find shared -name "*.c"))))
+COMMON_OBJS += $(addprefix build/,$(addsuffix .o,$(basename $(shell find $(COMMON_DIR)/src -name "*.c"))))
 
 
 ELF := build/bin/main.elf
