@@ -22,10 +22,10 @@ LIBOPENCM3_LDFLAGS =
 LIBOPENCM3_AR = arm-none-eabi-gcc-ar
 
 ifndef NO_LTO
-	LDFLAGS += -flto
-	CFLAGS += -flto
-	LIBOPENCM3_CFLAGS += -flto
-	LIBOPENCM3_LDFLAGS += -flto
+  LDFLAGS += -flto
+  CFLAGS += -flto
+  LIBOPENCM3_CFLAGS += -flto
+  LIBOPENCM3_LDFLAGS += -flto
 endif
 
 LIBOPENCM3_MAKE_ARGS = CFLAGS="$(LIBOPENCM3_CFLAGS)" LDFLAGS="$(LIBOPENCM3_LDFLAGS)" AR="$(LIBOPENCM3_AR)"
@@ -70,7 +70,7 @@ $(LIBOPENCM3_DIR):
 .PHONY: upload
 upload: $(BUILD_DIR)/bin/main.elf $(BUILD_DIR)/bin/main.bin
 	@echo "### UPLOADING"
-	@openocd -f openocd.cfg -c "program $< verify reset exit"
+	@openocd -f openocd.cfg -d2 -c "program $< verify reset exit"
 
 .PHONY: clean
 clean:
