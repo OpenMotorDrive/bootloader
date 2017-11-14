@@ -426,8 +426,8 @@ static void bootloader_init(void)
     init_clock();
     timing_init();
 
-    check_and_start_boot_timer();
     update_app_info();
+    check_and_start_boot_timer();
 
     begin_canbus_autobaud();
 
