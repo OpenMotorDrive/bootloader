@@ -15,16 +15,16 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <common/timing.h>
-#include <common/init.h>
-#include <common/can.h>
-#include <common/uavcan.h>
-#include <common/flash.h>
+#include <timing.h>
+#include <init.h>
+#include <can.h>
+#include <uavcan.h>
+#include <flash.h>
 #include <libopencm3/cm3/scb.h>
 #include <string.h>
-#include <common/shared_app_descriptor.h>
-#include <common/shared_boot_msg.h>
-#include <common/crc64_we.h>
+#include <shared_app_descriptor.h>
+#include <shared_boot_msg.h>
+#include <crc64_we.h>
 #include <stdlib.h>
 
 #ifdef STM32F3
@@ -278,6 +278,8 @@ static void begin_flash_from_path(uint8_t source_node_id, const char* path)
 // }
 
 static void uavcan_ready_handler(void) {
+    canbus_init(canbus_get_baudrate(), false, true);
+
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE) {
         begin_flash_from_path(shared_msg.firmwareupdate_msg.source_node_id, shared_msg.firmwareupdate_msg.path);
     }
@@ -377,7 +379,7 @@ static void update_canbus_autobaud(void) {
 }
 
 static void on_canbus_baudrate_confirmed(uint32_t canbus_baud) {
-    canbus_init(canbus_baud, false);
+    canbus_init(canbus_baud, false, false);
     canbus_initialized = true;
     uavcan_init();
 

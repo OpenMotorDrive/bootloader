@@ -7,7 +7,6 @@ LDSCRIPT = $(BOARD_DIR)/board.ld
 
 LIBOPENCM3_DIR := $(BOOTLOADER_DIR)/modules/libopencm3
 LIBCANARD_DIR := $(BOOTLOADER_DIR)/modules/libcanard
-COMMON_DIR := $(BOOTLOADER_DIR)/modules/omd_common
 
 ARCH_FLAGS := -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16
 
@@ -15,7 +14,7 @@ LDFLAGS := --static -nostartfiles -L$(LIBOPENCM3_DIR)/lib -L$(dir $(LDSCRIPT)) -
 
 LDLIBS := -lopencm3_stm32f3 -lm -Wl,--start-group -lc -lgcc -lrdimon -Wl,--end-group
 
-CFLAGS += -std=gnu11 -Os -ffast-math -g -Wdouble-promotion -Wextra -Wshadow -Werror=implicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes -fsingle-precision-constant -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -Isrc -I$(COMMON_DIR)/include -I$(LIBOPENCM3_DIR)/include -I$(LIBCANARD_DIR) -Iinclude -DSTM32F3 -D"CANARD_ASSERT(x)"="do {} while(0)" -DGIT_HASH=0x$(shell git rev-parse --short=8 HEAD) -fshort-wchar -include $(BOARD_CONFIG_HEADER)
+CFLAGS += -std=gnu11 -Os -ffast-math -g -Wdouble-promotion -Wextra -Wshadow -Werror=implicit-function-declaration -Wredundant-decls -Wmissing-prototypes -Wstrict-prototypes -fsingle-precision-constant -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef -Isrc -I$(LIBOPENCM3_DIR)/include -I$(LIBCANARD_DIR) -Iinclude -DSTM32F3 -D"CANARD_ASSERT(x)"="do {} while(0)" -DGIT_HASH=0x$(shell git rev-parse --short=8 HEAD) -fshort-wchar -include $(BOARD_CONFIG_HEADER)
 
 LIBOPENCM3_CFLAGS = -fshort-wchar
 LIBOPENCM3_LDFLAGS =
@@ -31,7 +30,6 @@ endif
 LIBOPENCM3_MAKE_ARGS = CFLAGS="$(LIBOPENCM3_CFLAGS)" LDFLAGS="$(LIBOPENCM3_LDFLAGS)" AR="$(LIBOPENCM3_AR)"
 
 COMMON_OBJS := $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(basename $(shell find $(BOOTLOADER_DIR)/src -name "*.c"))))
-COMMON_OBJS += $(addprefix $(BUILD_DIR)/,$(addsuffix .o,$(basename $(shell find $(COMMON_DIR)/src -name "*.c"))))
 
 
 ELF := $(BUILD_DIR)/bin/main.elf
