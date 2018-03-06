@@ -5,12 +5,15 @@
 #define BOARD_CONFIG_HW_MAJOR_VER 1
 #define BOARD_CONFIG_HW_MINOR_VER 0
 
+extern int _otp;
+extern int _otp_end;
+
 #define BOARD_CONFIG_HW_INFO_STRUCTURE { \
-    .hw_name = BOARD_CONFIG_HW_NAME, \
-    .hw_major_version = BOARD_CONFIG_HW_MAJOR_VER, \
-    .hw_minor_version = BOARD_CONFIG_HW_MINOR_VER, \
-    .board_desc_fmt = SHARED_HW_INFO_BOARD_DESC_FMT_NONE, \
-    .board_desc = 0, \
+.hw_name = BOARD_CONFIG_HW_NAME, \
+.hw_major_version = BOARD_CONFIG_HW_MAJOR_VER, \
+.hw_minor_version = BOARD_CONFIG_HW_MINOR_VER, \
+.otp = &_otp, \
+.otp_end = &_otp_end, \
 }
 
 // #define BOARD_CONFIG_I2C_BOOT_TRIGGER

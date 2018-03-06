@@ -414,6 +414,60 @@ static void i2c_boot_check(void) {
 }
 #endif
 
+#ifdef BOARD_CONFIG_LED_DISABLE
+
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/spi.h>
+
+static void led_spi_send_byte(uint8_t byte) {
+    while (!(SPI_SR(SPI3) & SPI_SR_TXE)); // wait for bus to become available
+    SPI_DR8(SPI3) = byte;
+}
+
+static void led_disable(void) {
+    rcc_periph_clock_enable(RCC_SPI3);
+    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_GPIOB);
+
+    gpio_mode_setup(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO15); // LED CS
+    gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO5); // MS5611 nCS
+    gpio_mode_setup(GPIOB, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO0); // ICM nCS
+    gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO4|GPIO5); // MISO,MOSI
+    gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO3); // SCK
+    gpio_set_af(GPIOB, GPIO_AF6, GPIO3|GPIO4|GPIO5);
+
+    // Enable profiLED
+    gpio_clear(GPIOA, GPIO15);
+
+    spi_reset(SPI3);
+
+    spi_enable_software_slave_management(SPI3);
+    spi_set_nss_high(SPI3);
+    spi_set_master_mode(SPI3);
+    spi_set_baudrate_prescaler(SPI3, SPI_CR1_BR_FPCLK_DIV_16); //<30mhz
+    spi_set_clock_polarity_0(SPI3);
+    spi_set_clock_phase_0(SPI3);
+
+    spi_enable(SPI3);
+
+    gpio_set(GPIOA, GPIO15);
+
+    for(uint8_t i=0;i<30;i++) __asm__("nop");
+
+    uint8_t buf[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x40, 0x00, 0x00, 0x20, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00};
+
+    for (uint8_t i=0; i<sizeof(buf); i++) {
+        led_spi_send_byte(buf[i]);
+    }
+
+    for(uint8_t i=0;i<30;i++) __asm__("nop");
+
+//     gpio_clear(GPIOA, GPIO15);
+}
+
+#endif
+
 static void bootloader_pre_init(void)
 {
     // check for a valid shared message, jump immediately if it is a boot command
@@ -426,6 +480,13 @@ static void bootloader_pre_init(void)
 static void bootloader_init(void)
 {
     init_clock();
+
+#ifdef BOARD_CONFIG_LED_DISABLE
+    #warning building with led_disable
+    led_disable();
+#endif
+
+
     timing_init();
 
     update_app_info();

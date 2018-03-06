@@ -12,12 +12,17 @@
 
 #define SHARED_APP_DESCRIPTOR_SIGNATURE "\x40\xa2\xe4\xf1\x64\x68\x91\x06"
 
-#define SHARED_APP_PARAMETERS_FMT 2
+#define SHARED_APP_PARAMETERS_FMT 1
 
 struct shared_app_parameters_s {
+    // this index is incremented on every param write - if two param structure pointers are provided,
+    // use a signed integer comparison to determine the most recently written structure
+    uint8_t param_idx;
     uint8_t boot_delay_sec;
-    uint32_t canbus_baudrate : 32;
+    uint32_t canbus_disable_auto_baud : 1;
+    uint32_t canbus_baudrate : 31;
     uint8_t canbus_local_node_id;
+    uint64_t crc64;
 } APP_DESCRIPTOR_PACKED;
 
 struct shared_app_descriptor_s {
@@ -28,8 +33,8 @@ struct shared_app_descriptor_s {
     uint8_t major_version;
     uint8_t minor_version;
     uint8_t parameters_fmt:7;
-    void* param_search_addr;
-    uint32_t param_search_len;
+    uint8_t parameters_ignore_crc64:1;
+    const struct shared_app_parameters_s* parameters[2];
 } APP_DESCRIPTOR_ALIGNED_AND_PACKED;
 
 const struct shared_app_descriptor_s* shared_find_app_descriptor(uint8_t* buf, uint32_t buf_len);

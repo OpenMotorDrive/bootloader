@@ -34,8 +34,8 @@ struct shared_hw_info_s {
     const char* const hw_name;
     uint8_t hw_major_version;
     uint8_t hw_minor_version;
-    uint8_t board_desc_fmt;
-    const void* const board_desc;
+    const void* const otp;
+    const void* const otp_end;
 } SHARED_MSG_PACKED;
 
 struct shared_boot_msg_s {

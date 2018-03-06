@@ -29,7 +29,7 @@ static bool param_struct_valid(const struct shared_app_parameters_s* parameters,
 
 const struct shared_app_parameters_s* shared_get_parameters(const struct shared_app_descriptor_s* descriptor)
 {
-    if (descriptor->parameters_fmt != SHARED_APP_PARAMETERS_FMT || !descriptor->param_search_addr) {
+    if (descriptor->parameters_fmt != SHARED_APP_PARAMETERS_FMT) {
         return 0;
     }
 

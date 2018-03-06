@@ -26,6 +26,7 @@ SECTIONS
         . = ALIGN(4);
         *(.rodata*)	/* Read-only data */
         . = ALIGN(4);
+        _otp = ALIGN(4);
     } >PROGRAM_REGION
 
     .bl (NOLOAD) : {
@@ -109,3 +110,5 @@ PROVIDE(_app_bl_shared_sec = ORIGIN(app_bl_shared));
 
 PROVIDE(_app_sec = ORIGIN(app));
 PROVIDE(_app_sec_end = ORIGIN(app)+LENGTH(app)+LENGTH(params));
+
+_otp_end = ORIGIN(app);
