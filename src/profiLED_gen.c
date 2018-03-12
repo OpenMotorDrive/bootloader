@@ -1,4 +1,4 @@
-#include <profiLED_gen.h>
+#include "profiLED_gen.h"
 #include <stdint.h>
 
 typedef void (*profiLED_gen_write_byte_func_internal_t)(uint32_t index, uint8_t byte, void* context);
@@ -11,11 +11,6 @@ void profiLED_gen_make_brg_color_rgb(uint8_t r, uint8_t g, uint8_t b, struct pro
 
 void profiLED_gen_make_brg_color_hex(uint32_t color, struct profiLED_gen_color_s* ret) {
     profiLED_gen_make_brg_color_rgb((uint8_t)(color>>16), (uint8_t)(color>>8), (uint8_t)color, ret);
-}
-
-uint32_t profiLED_gen_get_buf_size(uint32_t num_leds) {
-    uint32_t min_bits = num_leds*25+50;
-    return (min_bits+7)/8;
 }
 
 static uint32_t _profiLED_gen_write(uint32_t num_leds, struct profiLED_gen_color_s* profiLED_gen_colors, profiLED_gen_write_byte_func_internal_t write_byte, void* context) {
@@ -65,6 +60,12 @@ static uint32_t _profiLED_gen_write(uint32_t num_leds, struct profiLED_gen_color
     write_byte(output_idx, profiLED_gen_color_byte_array[profiLED_gen_data_bit_offset/8], context);
     output_idx++;
 
+    write_byte(output_idx, 0, context);
+    output_idx++;
+
+    write_byte(output_idx, 0, context);
+    output_idx++;
+
     return output_idx;
 }
 
@@ -83,7 +84,7 @@ static void _profiLED_gen_write_buf_cb(uint32_t index, uint8_t byte, void* conte
 }
 
 uint32_t profiLED_gen_write_buf(uint32_t num_leds, struct profiLED_gen_color_s* profiLED_gen_colors, uint8_t* buf, uint32_t buf_size) {
-    if (buf_size < profiLED_gen_get_buf_size(num_leds)) {
+    if (buf_size < PROFILED_GEN_BUF_SIZE(num_leds)) {
         return 0;
     }
 

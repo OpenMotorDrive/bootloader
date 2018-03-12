@@ -26,6 +26,8 @@
 #include <shared_boot_msg.h>
 #include <crc64_we.h>
 #include <stdlib.h>
+#include <profiLED_gen.h>
+#include <helpers.h>
 
 #ifdef STM32F3
 #define APP_PAGE_SIZE 2048
@@ -171,6 +173,10 @@ static void corrupt_app(void) {
     update_app_info();
 }
 
+#ifdef BOARD_CONFIG_HERE_LEDS
+static void here_led_disable(void);
+#endif
+
 static void command_boot_if_app_valid(uint8_t boot_reason)
 {
     if (!app_info.image_crc_correct) {
@@ -190,6 +196,10 @@ static void command_boot_if_app_valid(uint8_t boot_reason)
     }
 
     shared_msg_finalize_and_write(SHARED_MSG_BOOT, &msg);
+
+#ifdef BOARD_CONFIG_HERE_LEDS
+    here_led_disable();
+#endif
 
     scb_reset_system();
 }
@@ -414,7 +424,7 @@ static void i2c_boot_check(void) {
 }
 #endif
 
-#ifdef BOARD_CONFIG_LED_DISABLE
+#ifdef BOARD_CONFIG_HERE_LEDS
 
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
@@ -425,7 +435,35 @@ static void led_spi_send_byte(uint8_t byte) {
     SPI_DR8(SPI3) = byte;
 }
 
-static void led_disable(void) {
+static void here_led_disable(void) {
+    struct profiLED_gen_color_s colors[4] = {};
+    profiLED_gen_write(4, colors, led_spi_send_byte);
+}
+
+static void here_led_update(void) {
+    static uint32_t last_led_update_ms;
+    uint32_t tnow_ms = millis();
+
+    if (tnow_ms - last_led_update_ms < 20) {
+        return;
+    }
+
+    last_led_update_ms = tnow_ms;
+
+    struct profiLED_gen_color_s colors[4] = {};
+
+    const float phase_offsets[] = {0, M_PI_F/2, 3*M_PI_F/2, M_PI_F};
+
+    for (uint8_t i=0; i<4; i++) {
+        float phase = phase_offsets[i] + ((float)tnow_ms/1000)*2*M_PI_F;
+        float intensity = (sinf_fast(phase)+1)/2;
+        profiLED_gen_make_brg_color_rgb(0x00*intensity, 0x9d*intensity, 0xe6*intensity, &(colors[i]));
+    }
+
+    profiLED_gen_write(4, colors, led_spi_send_byte);
+}
+
+static void here_led_init(void) {
     rcc_periph_clock_enable(RCC_SPI3);
     rcc_periph_clock_enable(RCC_GPIOA);
     rcc_periph_clock_enable(RCC_GPIOB);
@@ -445,7 +483,7 @@ static void led_disable(void) {
     spi_enable_software_slave_management(SPI3);
     spi_set_nss_high(SPI3);
     spi_set_master_mode(SPI3);
-    spi_set_baudrate_prescaler(SPI3, SPI_CR1_BR_FPCLK_DIV_16); //<30mhz
+    spi_set_baudrate_prescaler(SPI3, SPI_CR1_BR_FPCLK_DIV_64); //<30mhz
     spi_set_clock_polarity_0(SPI3);
     spi_set_clock_phase_0(SPI3);
 
@@ -453,17 +491,9 @@ static void led_disable(void) {
 
     gpio_set(GPIOA, GPIO15);
 
-    for(uint8_t i=0;i<30;i++) __asm__("nop");
+    for(uint8_t i=0;i<200;i++) __asm__("nop");
 
-    uint8_t buf[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x40, 0x00, 0x00, 0x20, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00};
-
-    for (uint8_t i=0; i<sizeof(buf); i++) {
-        led_spi_send_byte(buf[i]);
-    }
-
-    for(uint8_t i=0;i<30;i++) __asm__("nop");
-
-//     gpio_clear(GPIOA, GPIO15);
+    here_led_disable();
 }
 
 #endif
@@ -481,13 +511,12 @@ static void bootloader_init(void)
 {
     init_clock();
 
-#ifdef BOARD_CONFIG_LED_DISABLE
-    #warning building with led_disable
-    led_disable();
-#endif
-
-
     timing_init();
+
+#ifdef BOARD_CONFIG_HERE_LEDS
+    #warning building with HERE_LEDS
+    here_led_init();
+#endif
 
     update_app_info();
     check_and_start_boot_timer();
@@ -507,6 +536,10 @@ static void bootloader_update(void)
 #ifdef BOARD_CONFIG_I2C_BOOT_TRIGGER
     #warning building with i2c_boot_check
     i2c_boot_check();
+#endif
+
+#ifdef BOARD_CONFIG_HERE_LEDS
+    here_led_update();
 #endif
 
     if (restart_req && (micros() - restart_req_us) > 1000) {
