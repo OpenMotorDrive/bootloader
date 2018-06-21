@@ -292,9 +292,9 @@ static void uavcan_ready_handler(void) {
 
     if (shared_msg_valid && shared_msgid == SHARED_MSG_FIRMWAREUPDATE) {
         begin_flash_from_path(shared_msg.firmwareupdate_msg.source_node_id, shared_msg.firmwareupdate_msg.path);
+    } else {
+        check_and_start_boot_timer();
     }
-
-    check_and_start_boot_timer();
 }
 
 static void on_update_complete(void) {
